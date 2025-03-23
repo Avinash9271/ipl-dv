@@ -173,19 +173,24 @@
                 if (!line) continue;  // Skip empty lines
                 
                 // Split by comma but keep commas within quotes
-                const values = line.match(/(?:\"([^\"]*)\"|([^,]+))/g)
-                    .map(val => val.replace(/^"|"$/g, '').trim());  // Remove quotes and trim
-                
+                const values = line.split(',').map(s => s.trim());
                 console.log('Line values:', values); // Debug log
                 
                 if (values.length >= 8) {
-                    const player_id = values[4];
-                    const team_id = values[5];
+                    // Convert string indices to numbers for player_id
+                    const player_id = values[4].toString();
+                    const team_id = values[5].toString();
                     const player_name = values[6];
                     const owner = values[7];
                     
                     if (player_id && owner) {
-                        mapping[player_id] = { player_name, team_id, owner };
+                        // Store the mapping with the player_id as a string
+                        mapping[player_id] = {
+                            player_name: player_name,
+                            team_id: team_id,
+                            owner: owner
+                        };
+                        console.log(`Added mapping for player ${player_id}:`, mapping[player_id]); // Debug log
                     }
                 }
             }
