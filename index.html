@@ -124,46 +124,62 @@
         async function fetchTeamOwnerMapping() {
             try {
                 // Try GitHub Pages path first with timestamp
+                console.log('Attempting to fetch teams.csv from GitHub Pages...');
                 const response = await fetch(addTimestamp('/ipl-dv/teams.csv'), {
                     cache: 'no-store'
                 });
                 if (!response.ok) {
+                    console.error('GitHub Pages fetch failed:', response.status, response.statusText);
                     throw new Error('Failed to load teams.csv');
                 }
                 const text = await response.text();
-                return parseTeamOwnerMapping(text);
+                console.log('Teams CSV content:', text); // Debug log
+                const mapping = parseTeamOwnerMapping(text);
+                console.log('Parsed team mapping:', mapping); // Debug log
+                return mapping;
             } catch (error) {
+                console.error('GitHub Pages fetch error:', error);
                 // Fallback to local path with timestamp
                 try {
+                    console.log('Attempting to fetch teams.csv from local path...');
                     const response = await fetch(addTimestamp('teams.csv'), {
                         cache: 'no-store'
                     });
                     if (!response.ok) {
+                        console.error('Local fetch failed:', response.status, response.statusText);
                         throw new Error('Failed to load teams.csv');
                     }
                     const text = await response.text();
-                    return parseTeamOwnerMapping(text);
+                    console.log('Teams CSV content:', text); // Debug log
+                    const mapping = parseTeamOwnerMapping(text);
+                    console.log('Parsed team mapping:', mapping); // Debug log
+                    return mapping;
                 } catch (secondError) {
+                    console.error('Local fetch error:', secondError);
                     throw new Error('Could not load team ownership data. Please check if teams.csv exists.');
                 }
             }
         }
 
         function parseTeamOwnerMapping(csvText) {
+            console.log('Parsing CSV text:', csvText); // Debug log
             const lines = csvText.split('\n');
+            console.log('CSV lines:', lines); // Debug log
             const mapping = {};
             
             // Skip header row
             for (let i = 1; i < lines.length; i++) {
                 const values = lines[i].split(',').map(s => s.trim());
-                if (values.length >= 4) {
-                    const [player_id, player_name, team_id, owner] = values;
+                console.log('Line values:', values); // Debug log
+                if (values.length >= 8) {  // We expect 8 columns now
+                    const [_, __, ___, ____, player_id, team_id, player_name, owner] = values;
                     if (player_id && owner) {
                         mapping[player_id] = { player_name, team_id, owner };
                     }
                 }
             }
             
+            console.log('Final mapping:', mapping); // Debug log
             return mapping;
         }
         
