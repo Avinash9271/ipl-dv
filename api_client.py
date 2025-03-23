@@ -16,12 +16,12 @@ class CricAPIClient:
         # Create match_data directory if it doesn't exist
         Path("match_data").mkdir(exist_ok=True)
     
-    def get_series(self):
-        """Get information about the IPL series"""
+    def get_series(self, series_id=None):
+        """Get information about the cricket series"""
         endpoint = f"{self.base_url}/series_info"
         params = {
             "apikey": self.api_key,
-            "id": os.environ.get("SERIES_ID", "c75f8952-74d4-416f-b7b4-7da4b4e3ae6e")  # Default to IPL 2023
+            "id": series_id or os.environ.get("SERIES_ID", "c75f8952-74d4-416f-b7b4-7da4b4e3ae6e")  # Default to IPL 2023
         }
         
         try:
