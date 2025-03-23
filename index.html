@@ -255,7 +255,8 @@
                     runs_conceded: 0,
                     dot_balls: 0,
                     good_ones: 0,
-                    score: 0
+                    score: 0,
+                    matchScores: {} // Track scores per match
                 };
             }
             console.log("Initialized player stats for", Object.keys(playerStats).length, "players");
@@ -336,6 +337,14 @@
             balls.forEach(ball => {
                 processBall(ball, matchId, matchPlayerScores);
             });
+            
+            // Store match scores for each player
+            for (const playerId in matchPlayerScores) {
+                if (playerStats[playerId]) {
+                    playerStats[playerId].matchScores = playerStats[playerId].matchScores || {};
+                    playerStats[playerId].matchScores[matchId] = matchPlayerScores[playerId];
+                }
+            }
             
             // Find player with highest score for this match
             let highestScore = -Infinity;
@@ -513,6 +522,14 @@
                 return existingId;
             }
             
+            // Check for common name variations (e.g., "V Kohli" vs "Virat Kohli")
+            // This helps match players across different formats in the API
+            const matchedId = findPlayerByNameVariation(normalizedName);
+            if (matchedId) {
+                playerNameToId[normalizedName] = matchedId;
+                return matchedId;
+            }
+            
             // Check for existing player in team mapping by ID
             if (teamOwnerMapping[playerId]) {
                 playerNameToId[normalizedName] = playerId;
@@ -562,7 +579,8 @@
                     runs_conceded: 0,
                     dot_balls: 0,
                     good_ones: 0,
-                    score: 0
+                    score: 0,
+                    matchScores: {} // Track scores per match
                 };
                 console.log(`Added new player: ${playerName} (${playerId})`);
             }
@@ -570,6 +588,51 @@
             // Register this player
             playerNameToId[normalizedName] = playerId;
             return playerId;
+        }
+        
+        // Helper function to find players by name variations
+        function findPlayerByNameVariation(normalizedName) {
+            // Common abbreviations and variations
+            // For example, "V Kohli" should match "Virat Kohli"
+            for (const [id, info] of Object.entries(teamOwnerMapping)) {
+                const fullName = info.player_name.toLowerCase();
+                
+                // Case 1: Full name in mapping matches part of the name from API
+                if (normalizedName.includes(fullName)) {
+                    return id;
+                }
+                
+                // Case 2: First initial + last name (e.g. "V Kohli" for "Virat Kohli")
+                const nameParts = fullName.split(' ');
+                if (nameParts.length >= 2) {
+                    const lastName = nameParts[nameParts.length - 1];
+                    const firstInitial = nameParts[0][0];
+                    
+                    // Check if the name matches pattern "F Lastname" (e.g. "V Kohli")
+                    const initialLastNamePattern = `${firstInitial} ${lastName}`;
+                    if (normalizedName === initialLastNamePattern) {
+                        return id;
+                    }
+                    
+                    // Check if last name matches and it's a unique last name
+                    if (normalizedName.includes(lastName) && lastName.length > 3) {
+                        // Check if this last name is unique enough
+                        let lastNameCount = 0;
+                        for (const otherInfo of Object.values(teamOwnerMapping)) {
+                            if (otherInfo.player_name.toLowerCase().includes(lastName)) {
+                                lastNameCount++;
+                            }
+                        }
+                        
+                        // If this last name is unique in our mapping, use it
+                        if (lastNameCount === 1) {
+                            return id;
+                        }
+                    }
+                }
+            }
+            
+            return null;
         }
         
         // Function to merge stats from sourceId into targetId
@@ -670,28 +733,49 @@
                 // Fielding score
                 const fielding_score = (player.catches + player.run_outs) * 10;
                 
-                // Final score
-                score = batsman_score + bowlers_score + fielding_score + 4;
+                // Base score without multipliers
+                const baseScore = batsman_score + bowlers_score + fielding_score + 4;
                 
-                // Apply 1.3x multiplier for highest scorer in each match
-                // Check if this player was the highest scorer in any match
-                let appliedMultiplier = false;
-                for (const matchId in matchHighestScorers) {
-                    if (matchHighestScorers[matchId].playerId === playerId) {
-                        score = score * 1.3;
-                        appliedMultiplier = true;
-                        console.log(`Applied 1.3x multiplier to ${player.player_name} as highest scorer in match ${matchId}`);
-                        break; // Only apply multiplier once
+                // Apply 1.3x multiplier ONLY to the match scores where this player was highest scorer
+                // First, calculate the sum of all match scores WITHOUT any multiplier
+                let totalMatchScores = 0;
+                let multipliedMatchScores = 0;
+                
+                // Track which matches got multiplier for display
+                const multipliedMatches = [];
+                
+                // Process each match score
+                for (const matchId in player.matchScores) {
+                    const matchScore = player.matchScores[matchId];
+                    
+                    // Check if this player was the highest scorer in this match
+                    if (matchHighestScorers[matchId] && matchHighestScorers[matchId].playerId === playerId) {
+                        // Apply 1.3x multiplier ONLY to this match's score
+                        multipliedMatchScores += matchScore * 1.3;
+                        multipliedMatches.push(matchId);
+                        console.log(`Applied 1.3x multiplier to ${player.player_name}'s score of ${matchScore} in match ${matchId}`);
+                    } else {
+                        // No multiplier for this match
+                        multipliedMatchScores += matchScore;
                     }
+                    
+                    // Add to total without multiplier (for tracking)
+                    totalMatchScores += matchScore;
                 }
+                
+                // Final score is the correctly multiplied match scores
+                score = multipliedMatchScores;
                 
                 // Store the calculated score
                 player.score = Math.round(score);
-                player.isHighestScorer = appliedMultiplier; // Flag for display
+                player.multipliedMatches = multipliedMatches; // Store which matches got multiplier
                 
                 // Log detailed score breakdown for debugging
-                console.log(`${player.player_name} score: ${player.score} (Batting: ${Math.round(batsman_score)}, ` +
-                    `Bowling: ${Math.round(bowlers_score)}, Fielding: ${fielding_score}${appliedMultiplier ? ', x1.3 multiplier' : ''})`);
+                console.log(`${player.player_name} score: ${player.score} ` + 
+                    `(Batting: ${Math.round(batsman_score)}, ` +
+                    `Bowling: ${Math.round(bowlers_score)}, ` + 
+                    `Fielding: ${fielding_score}, ` +
+                    `Multiplier: ${multipliedMatches.length > 0 ? '1.3x on ' + multipliedMatches.length + ' matches' : 'None'})`);
             }
             
             console.log("Calculated scores for all players");
@@ -729,12 +813,17 @@
             // Add player rows
             players.forEach((player, index) => {
                 // Add a highlight for players who got the multiplier
-                const rowClass = player.isHighestScorer ? 'style="background-color: #ffffd0;"' : '';
+                const rowClass = player.multipliedMatches && player.multipliedMatches.length > 0 ? 
+                    'style="background-color: #ffffd0;"' : '';
+                
+                // Create a star icon with the number of matches that got multiplier
+                const starIcon = player.multipliedMatches && player.multipliedMatches.length > 0 ? 
+                    ` 🌟×${player.multipliedMatches.length}` : '';
                 
                 tableHtml += `
                     <tr ${rowClass}>
                         <td>${index + 1}</td>
-                        <td>${player.player_name}${player.isHighestScorer ? ' 🌟' : ''}</td>
+                        <td>${player.player_name}${starIcon}</td>
                         <td>${player.owner}</td>
                         <td>${player.runs}</td>
                         <td>${player.strike_rate.toFixed(2)}</td>
