@@ -93,6 +93,7 @@
         let teamOwnerMapping = {};
         let playerStats = {};
         let matchesProcessed = 0;
+        let playerNameToId = {}; // Track players by name to prevent duplicates
         
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -334,96 +335,194 @@
             if (!ball || !ball.batsman || !ball.bowler) return;
             
             const batterId = String(ball.batsman.id || "");
+            const batterName = ball.batsman.name || "";
             const bowlerId = String(ball.bowler.id || "");
+            const bowlerName = ball.bowler.name || "";
             
-            // Process batter stats
-            if (batterId && playerStats[batterId]) {
+            // Handle batsman stats
+            updatePlayerStats(batterId, batterName, ball, true);
+            
+            // Handle bowler stats
+            updatePlayerStats(bowlerId, bowlerName, ball, false);
+            
+            // Process fielding stats (catches, run outs)
+            if (ball.dismissal === "catch" && ball.catcher) {
+                const catcherId = getCatcherId(ball);
+                const catcherName = typeof ball.catcher === 'object' ? ball.catcher.name : ball.catcher;
+                if (catcherId) {
+                    // Get or create the player
+                    const playerId = getOrCreatePlayer(catcherId, catcherName);
+                    if (playerId && playerStats[playerId]) {
+                        playerStats[playerId].catches += 1;
+                    }
+                }
+            }
+        }
+        
+        // Function to update player stats
+        function updatePlayerStats(playerId, playerName, ball, isBatsman) {
+            if (!playerId || !playerName) return;
+            
+            // Get or create proper player ID to prevent duplicates
+            const canonicalId = getOrCreatePlayer(playerId, playerName);
+            
+            if (!canonicalId || !playerStats[canonicalId]) return;
+            
+            if (isBatsman) {
+                // Update batting stats
                 const runs = parseInt(ball.runs || 0);
-                playerStats[batterId].runs += runs;
-                playerStats[batterId].balls_faced += 1;
+                playerStats[canonicalId].runs += runs;
+                playerStats[canonicalId].balls_faced += 1;
                 
                 // Update high score
-                if (runs > playerStats[batterId].high_score) {
-                    playerStats[batterId].high_score = runs;
+                if (runs > playerStats[canonicalId].high_score) {
+                    playerStats[canonicalId].high_score = runs;
                 }
                 
                 // Update strike rate
-                if (playerStats[batterId].balls_faced > 0) {
-                    playerStats[batterId].strike_rate = 
-                        (playerStats[batterId].runs / playerStats[batterId].balls_faced) * 100;
+                if (playerStats[canonicalId].balls_faced > 0) {
+                    playerStats[canonicalId].strike_rate = 
+                        (playerStats[canonicalId].runs / playerStats[canonicalId].balls_faced) * 100;
                 }
-            } else if (batterId) {
-                // If player not in our mapping, add them with basic info
-                console.log(`Adding missing batter: ${batterId} - ${ball.batsman.name}`);
-                playerStats[batterId] = {
-                    player_id: batterId,
-                    player_name: ball.batsman.name || "Unknown Player",
-                    team_id: "",
-                    owner: "Unknown",
-                    runs: parseInt(ball.runs || 0),
-                    balls_faced: 1,
-                    wickets: 0,
-                    balls_bowled: 0,
-                    catches: 0,
-                    run_outs: 0,
-                    economy: 0,
-                    high_score: parseInt(ball.runs || 0),
-                    strike_rate: parseInt(ball.runs || 0) * 100,
-                    score: 0
-                };
-            }
-            
-            // Process bowler stats
-            if (bowlerId && playerStats[bowlerId]) {
-                const runsConceded = parseInt(ball.runs || 0);
-                playerStats[bowlerId].balls_bowled += 1;
+            } else {
+                // Update bowling stats
+                playerStats[canonicalId].balls_bowled += 1;
                 
                 // Check for wicket
                 if (ball.dismissal) {
                     const dismissalType = ball.dismissal.toLowerCase();
                     if (["bowled", "caught", "lbw", "stumped", "caught and bowled", "hit wicket"].includes(dismissalType)) {
-                        playerStats[bowlerId].wickets += 1;
+                        playerStats[canonicalId].wickets += 1;
                     }
                 }
                 
                 // Calculate economy
-                if (playerStats[bowlerId].balls_bowled >= 6) {
-                    const overs = Math.floor(playerStats[bowlerId].balls_bowled / 6) + 
-                        (playerStats[bowlerId].balls_bowled % 6) / 10;
-                    playerStats[bowlerId].economy = 
-                        playerStats[bowlerId].runs / overs;
+                if (playerStats[canonicalId].balls_bowled >= 6) {
+                    const overs = Math.floor(playerStats[canonicalId].balls_bowled / 6) + 
+                        (playerStats[canonicalId].balls_bowled % 6) / 10;
+                    playerStats[canonicalId].economy = 
+                        playerStats[canonicalId].runs / overs;
                 }
-            } else if (bowlerId) {
-                // If player not in our mapping, add them with basic info
-                console.log(`Adding missing bowler: ${bowlerId} - ${ball.bowler.name}`);
-                playerStats[bowlerId] = {
-                    player_id: bowlerId,
-                    player_name: ball.bowler.name || "Unknown Player",
-                    team_id: "",
-                    owner: "Unknown",
+            }
+        }
+        
+        // Function to get existing player or create a new one, preventing duplicates
+        function getOrCreatePlayer(playerId, playerName) {
+            if (!playerName) return playerId;
+            
+            // Normalize player name for case-insensitive matching
+            const normalizedName = playerName.trim().toLowerCase();
+            
+            // Check if we've seen this player name before
+            if (playerNameToId[normalizedName]) {
+                // We have this player already with a different ID
+                const existingId = playerNameToId[normalizedName];
+                
+                if (existingId !== playerId) {
+                    console.log(`Found duplicate player! ${playerName} has IDs: ${existingId} and ${playerId}`);
+                    
+                    // If we have stats for this new ID, merge them into the existing player
+                    if (playerStats[playerId]) {
+                        mergePlayerStats(existingId, playerId);
+                        // Delete the duplicate entry
+                        delete playerStats[playerId];
+                    }
+                }
+                
+                // Return the canonical ID for this player
+                return existingId;
+            }
+            
+            // Check for existing player in team mapping by ID
+            if (teamOwnerMapping[playerId]) {
+                playerNameToId[normalizedName] = playerId;
+                return playerId;
+            }
+            
+            // Check if player exists in team mapping by name
+            let foundId = null;
+            for (const [id, info] of Object.entries(teamOwnerMapping)) {
+                if (info.player_name.toLowerCase() === normalizedName) {
+                    foundId = id;
+                    break;
+                }
+            }
+            
+            if (foundId) {
+                playerNameToId[normalizedName] = foundId;
+                
+                // If we have stats for the API ID, merge them into the CSV ID
+                if (playerStats[playerId] && playerId !== foundId) {
+                    mergePlayerStats(foundId, playerId);
+                    // Delete the duplicate entry
+                    delete playerStats[playerId];
+                }
+                
+                return foundId;
+            }
+            
+            // This is a new player not in our CSV
+            // Create player record if it doesn't exist
+            if (!playerStats[playerId]) {
+                const ownerInfo = findOwnerByName(playerName);
+                playerStats[playerId] = {
+                    player_id: playerId,
+                    player_name: playerName,
+                    team_id: ownerInfo.team_id || "",
+                    owner: ownerInfo.owner || "Unknown",
                     runs: 0,
                     balls_faced: 0,
-                    wickets: ball.dismissal ? 1 : 0,
-                    balls_bowled: 1,
+                    wickets: 0,
+                    balls_bowled: 0,
                     catches: 0,
                     run_outs: 0,
-                    economy: parseInt(ball.runs || 0),
+                    economy: 0,
                     high_score: 0,
                     strike_rate: 0,
                     score: 0
                 };
+                console.log(`Added new player: ${playerName} (${playerId})`);
             }
             
-            // Process fielding stats (catches, run outs)
-            if (ball.dismissal === "catch" && ball.catcher) {
-                const catcherId = getCatcherId(ball);
-                if (catcherId && playerStats[catcherId]) {
-                    playerStats[catcherId].catches += 1;
-                }
-            } else if (ball.dismissal === "run out") {
-                // Unfortunately the provided data might not clearly indicate who made the run out
-                // This would need to be handled if that data is available
+            // Register this player
+            playerNameToId[normalizedName] = playerId;
+            return playerId;
+        }
+        
+        // Function to merge stats from sourceId into targetId
+        function mergePlayerStats(targetId, sourceId) {
+            if (!playerStats[targetId] || !playerStats[sourceId]) return;
+            
+            console.log(`Merging player stats from ${sourceId} to ${targetId}`);
+            
+            const target = playerStats[targetId];
+            const source = playerStats[sourceId];
+            
+            // Merge numerical stats
+            target.runs += source.runs;
+            target.balls_faced += source.balls_faced;
+            target.wickets += source.wickets;
+            target.balls_bowled += source.balls_bowled;
+            target.catches += source.catches;
+            target.run_outs += source.run_outs;
+            
+            // Update high score if needed
+            if (source.high_score > target.high_score) {
+                target.high_score = source.high_score;
             }
+            
+            // Recalculate strike rate
+            if (target.balls_faced > 0) {
+                target.strike_rate = (target.runs / target.balls_faced) * 100;
+            }
+            
+            // Recalculate economy
+            if (target.balls_bowled >= 6) {
+                const overs = Math.floor(target.balls_bowled / 6) + (target.balls_bowled % 6) / 10;
+                target.economy = target.runs / overs;
+            }
+            
+            console.log(`Merged stats for ${target.player_name}`);
         }
         
         // Helper to extract catcher ID - schema might vary
@@ -431,15 +530,31 @@
             if (ball.catcher && typeof ball.catcher === 'object' && ball.catcher.id) {
                 return String(ball.catcher.id);
             } else if (ball.catcher && typeof ball.catcher === 'string') {
-                // We'd need to try to map the catcher name to an ID
-                // This is a simplified approach
-                for (const [playerId, playerData] of Object.entries(playerStats)) {
-                    if (playerData.player_name === ball.catcher) {
+                // Look up player by name
+                const catcherName = ball.catcher.toLowerCase();
+                for (const [playerName, playerId] of Object.entries(playerNameToId)) {
+                    if (playerName === catcherName) {
                         return playerId;
                     }
                 }
             }
             return null;
+        }
+        
+        // Helper function to find owner info by player name
+        function findOwnerByName(playerName) {
+            if (!playerName) return { owner: "Unknown", team_id: "" };
+            
+            // Look for exact name matches first
+            for (const [playerId, info] of Object.entries(teamOwnerMapping)) {
+                if (info.player_name.toLowerCase() === playerName.toLowerCase()) {
+                    console.log(`Found exact owner match for: ${playerName} -> ${info.owner}`);
+                    return { owner: info.owner, team_id: info.team_id };
+                }
+            }
+            
+            // No special cases - just return Unknown if no match found
+            return { owner: "Unknown", team_id: "" };
         }
         
         // Calculate player scores using the provided score function
