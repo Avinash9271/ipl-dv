@@ -64,6 +64,9 @@
         // Full API key with last 4 characters matching the URL parameter
         const FULL_API_KEY = "282bffef-9065-43b3-91f0-df54dec227fd";
         
+        // IPL 2025 Series ID
+        const IPL_2025_SERIES_ID = "d5a498c8-7596-4b93-8ab0-e0efc3345312";
+        
         // Add timestamp to prevent caching
         function addTimestamp(url) {
             return `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
@@ -79,9 +82,6 @@
         document.getElementById('results').style.display = 'none';
         fetchData(FULL_API_KEY);
 
-        // IPL 2025 Series ID
-        const IPL_2025_SERIES_ID = "d5a498c8-7596-4b93-8ab0-e0efc3345312";
-        
         async function fetchData(apiKey) {            
             document.getElementById('loadingMessage').textContent = 'Loading data from CricAPI...';
             
