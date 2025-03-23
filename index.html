@@ -251,6 +251,9 @@
                     economy: 0,
                     high_score: 0,
                     strike_rate: 0,
+                    runs_conceded: 0,
+                    dot_balls: 0,
+                    good_ones: 0,
                     score: 0
                 };
             }
@@ -356,6 +359,19 @@
                         playerStats[playerId].catches += 1;
                     }
                 }
+            } else if (ball.dismissal && ball.dismissal.toLowerCase() === "run out") {
+                // Try to find the run out fielder if available
+                if (ball.fielder) {
+                    const fielderId = typeof ball.fielder === 'object' ? String(ball.fielder.id || "") : "";
+                    const fielderName = typeof ball.fielder === 'object' ? ball.fielder.name : ball.fielder;
+                    
+                    if (fielderId) {
+                        const playerId = getOrCreatePlayer(fielderId, fielderName);
+                        if (playerId && playerStats[playerId]) {
+                            playerStats[playerId].run_outs += 1;
+                        }
+                    }
+                }
             }
         }
         
@@ -387,12 +403,23 @@
             } else {
                 // Update bowling stats
                 playerStats[canonicalId].balls_bowled += 1;
+                playerStats[canonicalId].runs_conceded += parseInt(ball.runs || 0);
+                
+                // Check for dot ball
+                if (parseInt(ball.runs || 0) === 0) {
+                    playerStats[canonicalId].dot_balls += 1;
+                }
                 
                 // Check for wicket
                 if (ball.dismissal) {
                     const dismissalType = ball.dismissal.toLowerCase();
                     if (["bowled", "caught", "lbw", "stumped", "caught and bowled", "hit wicket"].includes(dismissalType)) {
                         playerStats[canonicalId].wickets += 1;
+                        
+                        // Check for good_one (bowled/lbw/caught and bowled)
+                        if (["bowled", "lbw", "caught and bowled"].includes(dismissalType)) {
+                            playerStats[canonicalId].good_ones += 1;
+                        }
                     }
                 }
                 
@@ -401,7 +428,7 @@
                     const overs = Math.floor(playerStats[canonicalId].balls_bowled / 6) + 
                         (playerStats[canonicalId].balls_bowled % 6) / 10;
                     playerStats[canonicalId].economy = 
-                        playerStats[canonicalId].runs / overs;
+                        playerStats[canonicalId].runs_conceded / overs;
                 }
             }
         }
@@ -479,6 +506,9 @@
                     economy: 0,
                     high_score: 0,
                     strike_rate: 0,
+                    runs_conceded: 0,
+                    dot_balls: 0,
+                    good_ones: 0,
                     score: 0
                 };
                 console.log(`Added new player: ${playerName} (${playerId})`);
@@ -505,6 +535,9 @@
             target.balls_bowled += source.balls_bowled;
             target.catches += source.catches;
             target.run_outs += source.run_outs;
+            target.runs_conceded += source.runs_conceded;
+            target.dot_balls += source.dot_balls;
+            target.good_ones += source.good_ones;
             
             // Update high score if needed
             if (source.high_score > target.high_score) {
@@ -519,7 +552,7 @@
             // Recalculate economy
             if (target.balls_bowled >= 6) {
                 const overs = Math.floor(target.balls_bowled / 6) + (target.balls_bowled % 6) / 10;
-                target.economy = target.runs / overs;
+                target.economy = target.runs_conceded / overs;
             }
             
             console.log(`Merged stats for ${target.player_name}`);
@@ -566,27 +599,32 @@
                 let score = 0;
                 
                 // Batting score
-                score += player.runs;
+                let batsman_score = 0;
+                if (player.balls_faced > 0) {
+                    const sr = player.runs / player.balls_faced;
+                    batsman_score = player.runs + (sr - 1.5) * Math.max(player.runs, player.balls_faced) + 
+                                   (player.runs >= 50 ? 8 : 0) + (player.runs >= 100 ? 8 : 0);
+                }
                 
                 // Bowling score
-                score += player.wickets * 25;
+                let bowlers_score = 0;
+                if (player.balls_bowled > 0) {
+                    bowlers_score = 3 * (1.5 * player.balls_bowled - player.runs_conceded) + 
+                                   player.wickets * 20 + player.good_ones * 10 + 
+                                   (player.wickets >= 3 ? 15 : 0) + player.dot_balls;
+                }
                 
                 // Fielding score
-                score += player.catches * 10;
-                score += player.run_outs * 10;
+                const fielding_score = (player.catches + player.run_outs) * 10;
                 
-                // Bonus for good strike rate (if enough balls faced)
-                if (player.balls_faced >= 10 && player.strike_rate > 150) {
-                    score += 10;
-                }
-                
-                // Bonus for good economy (if enough balls bowled)
-                if (player.balls_bowled >= 12 && player.economy < 7) {
-                    score += 10;
-                }
+                // Final score
+                score = batsman_score + bowlers_score + fielding_score + 4;
                 
                 // Store the calculated score
-                player.score = score;
+                player.score = Math.round(score);
+                
+                // Log detailed score breakdown for debugging
+                console.log(`${player.player_name} score: ${player.score} (Batting: ${Math.round(batsman_score)}, Bowling: ${Math.round(bowlers_score)}, Fielding: ${fielding_score})`);
             }
             
             console.log("Calculated scores for all players");
@@ -612,6 +650,7 @@
                             <th>SR</th>
                             <th>Wickets</th>
                             <th>Economy</th>
+                            <th>Dots</th>
                             <th>Catches</th>
                             <th>Run Outs</th>
                             <th>Score</th>
@@ -631,6 +670,7 @@
                         <td>${player.strike_rate.toFixed(2)}</td>
                         <td>${player.wickets}</td>
                         <td>${player.economy.toFixed(2)}</td>
+                        <td>${player.dot_balls}</td>
                         <td>${player.catches}</td>
                         <td>${player.run_outs}</td>
                         <td><strong>${player.score}</strong></td>
