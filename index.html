@@ -63,7 +63,16 @@
     </div>
 
     <script>
-        // Series ID for IPL 2024
+        // Check URL parameters for API key
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const key = urlParams.get('key');
+            if (key) {
+                document.getElementById('apiKey').value = key;
+                fetchData(); // Auto-fetch if key is provided
+            }
+        };
+
         const IPL_2024_SERIES_ID = "47b54677-34de-4378-9019-154e82b9cc1a";
         
         async function fetchData() {
@@ -75,17 +84,22 @@
             
             document.getElementById('loadingMessage').style.display = 'block';
             document.getElementById('results').style.display = 'none';
+            document.getElementById('loadingMessage').textContent = 'Loading data from CricAPI...';
             
             try {
+                // Fetch series matches first to validate API key
+                const matches = await fetchSeriesMatches(apiKey, IPL_2024_SERIES_ID);
+                if (!matches || matches.length === 0) {
+                    throw new Error('No matches found for the series');
+                }
+                
                 // Fetch team owner mapping
                 const teamOwnerMapping = await fetchTeamOwnerMapping();
-                
-                // Fetch series matches
-                const matches = await fetchSeriesMatches(apiKey, IPL_2024_SERIES_ID);
                 
                 // Process each match
                 const matchStats = {};
                 for (const match of matches) {
+                    document.getElementById('loadingMessage').textContent = `Loading match details for ${match.name}...`;
                     const matchDetails = await fetchMatchDetails(apiKey, match.id);
                     processMatchDetails(matchDetails, match.id, teamOwnerMapping, matchStats);
                 }
@@ -109,9 +123,31 @@
         }
         
         async function fetchTeamOwnerMapping() {
-            const response = await fetch('teams.csv');
-            const text = await response.text();
-            const lines = text.split('\n');
+            try {
+                // Try GitHub Pages path first
+                const response = await fetch('/ipl-dv/teams.csv');
+                if (!response.ok) {
+                    throw new Error('Failed to load teams.csv');
+                }
+                const text = await response.text();
+                return parseTeamOwnerMapping(text);
+            } catch (error) {
+                // Fallback to local path
+                try {
+                    const response = await fetch('teams.csv');
+                    if (!response.ok) {
+                        throw new Error('Failed to load teams.csv');
+                    }
+                    const text = await response.text();
+                    return parseTeamOwnerMapping(text);
+                } catch (secondError) {
+                    throw new Error('Could not load team ownership data. Please check if teams.csv exists.');
+                }
+            }
+        }
+
+        function parseTeamOwnerMapping(csvText) {
+            const lines = csvText.split('\n');
             const mapping = {};
             
             // Skip header row
