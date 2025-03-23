@@ -86,7 +86,7 @@
 
     <script>
         // Constants
-        const API_KEY = "27fd7f41-1a6e-4aff-b641-a4b34cc3fc25";
+        const API_KEY = "282bffef-9065-43b3-91f0-df54dec227fd";
         const IPL_2025_SERIES_ID = "d5a498c8-7596-4b93-8ab0-e0efc3345312";
         
         // Variables to store data
@@ -109,6 +109,11 @@
             fetchData();
         }
         
+        // Add timestamp to prevent caching
+        function addTimestamp(url) {
+            return `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
+        }
+        
         // Main function to fetch all required data
         async function fetchData() {
             try {
@@ -129,17 +134,21 @@
                 
                 // Step 3: Process each match to calculate player stats
                 if (matches && matches.length > 0) {
-                    const matchPromises = matches.map(match => fetchMatchDetails(API_KEY, match.id));
-                    const matchResults = await Promise.allSettled(matchPromises);
+                    const startedMatches = matches.filter(match => match.matchStarted);
+                    console.log(`Found ${startedMatches.length} started matches`);
                     
-                    matchResults.forEach((result, index) => {
-                        if (result.status === 'fulfilled' && result.value) {
-                            processMatchData(result.value);
-                            matchesProcessed++;
-                        } else {
-                            console.error("Failed to fetch match details:", result.reason);
+                    for (const match of startedMatches) {
+                        document.getElementById('loading').textContent = `Loading match details for ${match.name}...`;
+                        try {
+                            const matchDetails = await fetchMatchDetails(API_KEY, match.id);
+                            if (matchDetails && matchDetails.status === "success") {
+                                processMatchData(matchDetails);
+                                matchesProcessed++;
+                            }
+                        } catch (matchError) {
+                            console.error(`Error processing match ${match.id}:`, matchError);
                         }
-                    });
+                    }
                 }
                 
                 // Step 4: Calculate and display player scores
@@ -251,7 +260,7 @@
         async function fetchSeriesMatches(apiKey, seriesId) {
             try {
                 console.log(`Fetching matches for series: ${seriesId}`);
-                const url = `https://api.sports.staticcdn.com/cricket/series/${seriesId}/matches?apikey=${apiKey}&t=${Date.now()}`;
+                const url = addTimestamp(`https://api.cricapi.com/v1/series_info?apikey=${apiKey}&id=${seriesId}`);
                 
                 const response = await fetch(url, {
                     method: 'GET',
@@ -263,8 +272,13 @@
                 }
                 
                 const data = await response.json();
-                console.log(`Found ${data.matches ? data.matches.length : 0} matches`);
-                return data.matches || [];
+                console.log('Series API Response:', data);
+                
+                if (data.status !== "success") {
+                    throw new Error(data.info || data.error || 'API returned unsuccessful status');
+                }
+                
+                return data.data.matchList || [];
                 
             } catch (error) {
                 console.error("Error fetching series matches:", error);
@@ -276,7 +290,7 @@
         async function fetchMatchDetails(apiKey, matchId) {
             try {
                 console.log(`Fetching details for match: ${matchId}`);
-                const url = `https://api.sports.staticcdn.com/cricket/match/${matchId}/innings/?apikey=${apiKey}&t=${Date.now()}`;
+                const url = addTimestamp(`https://api.cricapi.com/v1/match_bbb?apikey=${apiKey}&id=${matchId}`);
                 
                 const response = await fetch(url, {
                     method: 'GET',
@@ -288,6 +302,7 @@
                 }
                 
                 const data = await response.json();
+                console.log(`Match details API Response for ${matchId}:`, data.status);
                 return data;
                 
             } catch (error) {
@@ -300,33 +315,26 @@
         function processMatchData(matchData) {
             console.log("Processing match data");
             
-            if (!matchData || !matchData.innings) {
-                console.warn("No innings data found in match");
+            if (!matchData || !matchData.data || !matchData.data.bbb) {
+                console.warn("No ball-by-ball data found in match");
                 return;
             }
             
-            // Process each innings
-            matchData.innings.forEach(innings => {
-                if (!innings.overs) return;
-                
-                // Process each over
-                innings.overs.forEach(over => {
-                    if (!over.balls) return;
-                    
-                    // Process each ball
-                    over.balls.forEach(ball => {
-                        processBall(ball);
-                    });
-                });
+            const balls = matchData.data.bbb;
+            console.log(`Processing ${balls.length} balls`);
+            
+            // Process each ball
+            balls.forEach(ball => {
+                processBall(ball);
             });
         }
         
         // Function to process a single ball
         function processBall(ball) {
-            if (!ball) return;
+            if (!ball || !ball.batsman || !ball.bowler) return;
             
-            const batterId = String(ball.batter_id || ball.batsman_id || "");
-            const bowlerId = String(ball.bowler_id || "");
+            const batterId = String(ball.batsman.id || "");
+            const bowlerId = String(ball.bowler.id || "");
             
             // Process batter stats
             if (batterId && playerStats[batterId]) {
@@ -344,15 +352,38 @@
                     playerStats[batterId].strike_rate = 
                         (playerStats[batterId].runs / playerStats[batterId].balls_faced) * 100;
                 }
+            } else if (batterId) {
+                // If player not in our mapping, add them with basic info
+                console.log(`Adding missing batter: ${batterId} - ${ball.batsman.name}`);
+                playerStats[batterId] = {
+                    player_id: batterId,
+                    player_name: ball.batsman.name || "Unknown Player",
+                    team_id: "",
+                    owner: "Unknown",
+                    runs: parseInt(ball.runs || 0),
+                    balls_faced: 1,
+                    wickets: 0,
+                    balls_bowled: 0,
+                    catches: 0,
+                    run_outs: 0,
+                    economy: 0,
+                    high_score: parseInt(ball.runs || 0),
+                    strike_rate: parseInt(ball.runs || 0) * 100,
+                    score: 0
+                };
             }
             
             // Process bowler stats
             if (bowlerId && playerStats[bowlerId]) {
+                const runsConceded = parseInt(ball.runs || 0);
                 playerStats[bowlerId].balls_bowled += 1;
                 
                 // Check for wicket
-                if (ball.wicket && ball.wicket.dismissed_id) {
-                    playerStats[bowlerId].wickets += 1;
+                if (ball.dismissal) {
+                    const dismissalType = ball.dismissal.toLowerCase();
+                    if (["bowled", "caught", "lbw", "stumped", "caught and bowled", "hit wicket"].includes(dismissalType)) {
+                        playerStats[bowlerId].wickets += 1;
+                    }
                 }
                 
                 // Calculate economy
@@ -362,21 +393,53 @@
                     playerStats[bowlerId].economy = 
                         playerStats[bowlerId].runs / overs;
                 }
+            } else if (bowlerId) {
+                // If player not in our mapping, add them with basic info
+                console.log(`Adding missing bowler: ${bowlerId} - ${ball.bowler.name}`);
+                playerStats[bowlerId] = {
+                    player_id: bowlerId,
+                    player_name: ball.bowler.name || "Unknown Player",
+                    team_id: "",
+                    owner: "Unknown",
+                    runs: 0,
+                    balls_faced: 0,
+                    wickets: ball.dismissal ? 1 : 0,
+                    balls_bowled: 1,
+                    catches: 0,
+                    run_outs: 0,
+                    economy: parseInt(ball.runs || 0),
+                    high_score: 0,
+                    strike_rate: 0,
+                    score: 0
+                };
             }
             
             // Process fielding stats (catches, run outs)
-            if (ball.wicket) {
-                const wicket = ball.wicket;
-                const fielder_id = String(wicket.fielder_id || "");
-                
-                if (fielder_id && playerStats[fielder_id]) {
-                    if (wicket.mode === "caught" || wicket.mode === "caught and bowled") {
-                        playerStats[fielder_id].catches += 1;
-                    } else if (wicket.mode === "run out") {
-                        playerStats[fielder_id].run_outs += 1;
+            if (ball.dismissal === "catch" && ball.catcher) {
+                const catcherId = getCatcherId(ball);
+                if (catcherId && playerStats[catcherId]) {
+                    playerStats[catcherId].catches += 1;
+                }
+            } else if (ball.dismissal === "run out") {
+                // Unfortunately the provided data might not clearly indicate who made the run out
+                // This would need to be handled if that data is available
+            }
+        }
+        
+        // Helper to extract catcher ID - schema might vary
+        function getCatcherId(ball) {
+            if (ball.catcher && typeof ball.catcher === 'object' && ball.catcher.id) {
+                return String(ball.catcher.id);
+            } else if (ball.catcher && typeof ball.catcher === 'string') {
+                // We'd need to try to map the catcher name to an ID
+                // This is a simplified approach
+                for (const [playerId, playerData] of Object.entries(playerStats)) {
+                    if (playerData.player_name === ball.catcher) {
+                        return playerId;
                     }
                 }
             }
+            return null;
         }
         
         // Calculate player scores using the provided score function
