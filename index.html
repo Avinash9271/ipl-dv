@@ -22,6 +22,19 @@
         h1, h2 {
             color: #1e3a8a;
         }
+        .status-message {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .error {
+            background-color: #ffdddd;
+            color: #990000;
+        }
+        .info {
+            background-color: #e6f0ff;
+            color: #1e3a8a;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -42,29 +55,9 @@
         tr:hover {
             background-color: #e6f0ff;
         }
-        .api-key-section {
-            margin-bottom: 20px;
-            padding: 15px;
-            background-color: #e6f0ff;
-            border-radius: 5px;
-        }
-        input, button {
-            padding: 8px;
-            margin-right: 10px;
-        }
-        button {
-            background-color: #1e3a8a;
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 3px;
-        }
-        button:hover {
-            background-color: #152c6c;
-        }
         .loading {
-            display: none;
-            margin-top: 10px;
+            margin-top: 20px;
+            text-align: center;
             color: #666;
         }
     </style>
@@ -73,11 +66,8 @@
     <div class="container">
         <h1>Cricket Team Statistics</h1>
         
-        <div class="api-key-section">
-            <h3>Enter API Key (Last 4 characters only)</h3>
-            <input type="text" id="api-key-input" placeholder="Last 4 digits of API key" maxlength="4">
-            <button id="load-data-btn">Load Data</button>
-            <div id="loading" class="loading">Loading data...</div>
+        <div id="status-message" class="status-message info">
+            Loading data...
         </div>
         
         <div id="data-container">
@@ -117,34 +107,51 @@
     
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const apiKeyInput = document.getElementById('api-key-input');
-            const loadDataBtn = document.getElementById('load-data-btn');
-            const loadingIndicator = document.getElementById('loading');
+            const statusMessage = document.getElementById('status-message');
+            const dataContainer = document.getElementById('data-container');
             
-            // Load data when the button is clicked
-            loadDataBtn.addEventListener('click', function() {
-                const apiKeyLast4 = apiKeyInput.value.trim();
-                if (apiKeyLast4.length !== 4) {
-                    alert('Please enter the last 4 characters of your API key');
-                    return;
-                }
-                
-                loadingIndicator.style.display = 'block';
-                
-                // In this static implementation, we'll just load the owner_stats.json file directly
-                fetch('owner_stats.json')
-                    .then(response => response.json())
-                    .then(data => {
-                        displayTeamScores(data);
-                        displayPlayersByOwner(data);
-                        loadingIndicator.style.display = 'none';
-                    })
-                    .catch(error => {
-                        console.error('Error loading data:', error);
-                        loadingIndicator.style.display = 'none';
-                        alert('Error loading data. Please try again.');
-                    });
-            });
+            // Initially hide the data container until we load data
+            dataContainer.style.display = 'none';
+            
+            // Parse URL parameters to get the API key
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiKeyLast4 = urlParams.get('key');
+            
+            if (!apiKeyLast4 || apiKeyLast4.length !== 4) {
+                statusMessage.className = 'status-message error';
+                statusMessage.textContent = 'Error: Please provide the last 4 characters of your API key in the URL (e.g., ?key=1234)';
+                return;
+            }
+            
+            // Show loading message
+            statusMessage.textContent = `Loading data with API key ending in: ${apiKeyLast4}...`;
+            
+            // Load the data from owner_stats.json
+            fetch('owner_stats.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to load data file');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Display the data
+                    displayTeamScores(data);
+                    displayPlayersByOwner(data);
+                    
+                    // Show the data container
+                    dataContainer.style.display = 'block';
+                    
+                    // Update status message
+                    statusMessage.className = 'status-message info';
+                    statusMessage.textContent = `Data loaded successfully (API key: ...${apiKeyLast4})`;
+                })
+                .catch(error => {
+                    // Show error message
+                    statusMessage.className = 'status-message error';
+                    statusMessage.textContent = `Error loading data: ${error.message}`;
+                    console.error('Error:', error);
+                });
             
             function displayTeamScores(data) {
                 const tableBody = document.getElementById('team-scores-body');
