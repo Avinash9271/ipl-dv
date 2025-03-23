@@ -162,40 +162,32 @@
         }
 
         function parseTeamOwnerMapping(csvText) {
-            console.log('Parsing CSV text:', csvText); // Debug log
             const lines = csvText.trim().split('\n');
-            console.log('CSV lines:', lines); // Debug log
             const mapping = {};
             
             // Skip header row
             for (let i = 1; i < lines.length; i++) {
                 const line = lines[i].trim();
-                if (!line) continue;  // Skip empty lines
+                if (!line) continue;
                 
-                // Split by comma but keep commas within quotes
                 const values = line.split(',').map(s => s.trim());
-                console.log('Line values:', values); // Debug log
                 
                 if (values.length >= 8) {
-                    // Convert string indices to numbers for player_id
                     const player_id = values[4].toString();
                     const team_id = values[5].toString();
                     const player_name = values[6];
                     const owner = values[7];
                     
                     if (player_id && owner) {
-                        // Store the mapping with the player_id as a string
                         mapping[player_id] = {
-                            player_name: player_name,
-                            team_id: team_id,
-                            owner: owner
+                            player_name,
+                            team_id,
+                            owner
                         };
-                        console.log(`Added mapping for player ${player_id}:`, mapping[player_id]); // Debug log
                     }
                 }
             }
             
-            console.log('Final mapping:', mapping); // Debug log
             return mapping;
         }
         
@@ -286,8 +278,9 @@
             const batter = ball.batter || ball.batsman || {};
             const bowler = ball.bowler || {};
             
-            const batterId = batter.id;
-            const bowlerId = bowler.id;
+            // Get IDs and ensure they're strings
+            const batterId = (batter.id || '').toString();
+            const bowlerId = (bowler.id || '').toString();
             
             if (!batterId || !bowlerId) return;
             
@@ -311,14 +304,14 @@
             
             // Update batter stats
             const batterStats = matchStats[batterId];
-            const runs = (ball.runs?.batter || ball.runs || 0);
+            const runs = parseInt(ball.runs?.batter || ball.runs || 0);
             batterStats.runs += runs;
             batterStats.balls += 1;
             
             // Update bowler stats
             const bowlerStats = matchStats[bowlerId];
             bowlerStats.bowled_balls += 1;
-            bowlerStats.runs_conceded += (ball.runs?.total || ball.runs || 0);
+            bowlerStats.runs_conceded += parseInt(ball.runs?.total || ball.runs || 0);
             
             // Handle wickets
             if (ball.isWicket || ball.wicket) {
@@ -336,7 +329,7 @@
                 // Handle catches
                 if (wicketType === 'caught') {
                     const fielder = (wicket.fielders || [])[0] || {};
-                    const fielderId = fielder.id;
+                    const fielderId = (fielder.id || '').toString();
                     
                     if (fielderId) {
                         if (!matchStats[fielderId]) {
@@ -360,7 +353,7 @@
                 // Handle run outs
                 if (wicketType === 'run out') {
                     (wicket.fielders || []).forEach(fielder => {
-                        const fielderId = fielder.id;
+                        const fielderId = (fielder.id || '').toString();
                         if (fielderId) {
                             if (!matchStats[fielderId]) {
                                 matchStats[fielderId] = {
@@ -414,24 +407,6 @@
                         });
                     }
                 });
-                
-                // Find highest scorer in each match and apply 1.3x multiplier
-                let maxScore = 0;
-                let highestScorer = null;
-                
-                Object.entries(match).forEach(([playerId, stats]) => {
-                    if (stats.score > maxScore) {
-                        maxScore = stats.score;
-                        highestScorer = playerId;
-                    }
-                });
-                
-                if (highestScorer) {
-                    const stats = match[highestScorer];
-                    stats.originalScore = stats.score;
-                    stats.score *= 1.3;
-                    stats.isHighestScorer = true;
-                }
             });
             
             // Calculate total scores for each owner
