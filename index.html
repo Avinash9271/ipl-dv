@@ -94,6 +94,7 @@
                 
                 // Fetch team owner mapping
                 const teamOwnerMapping = await fetchTeamOwnerMapping();
+                console.log('Team mapping keys count:', Object.keys(teamOwnerMapping).length);
                 
                 // Initialize global player stats
                 const playerStats = {};
@@ -105,8 +106,13 @@
                     processMatchDetails(matchDetails, match.id, teamOwnerMapping, playerStats);
                 }
                 
+                console.log('Final player stats:', playerStats);
+                console.log('Player stats keys count:', Object.keys(playerStats).length);
+                
                 // Calculate owner stats directly from player stats
                 const ownerStats = calculateOwnerStats(playerStats, teamOwnerMapping);
+                console.log('Owner stats:', ownerStats);
+                console.log('Owner stats keys count:', Object.keys(ownerStats).length);
                 
                 // Display results
                 displayResults(ownerStats);
@@ -252,28 +258,111 @@
         
         function processMatchDetails(matchData, matchId, teamOwnerMapping, playerStats) {
             const data = matchData.data || matchData;
-            let ballByBall = data.data?.balls || [];
             
-            if (!ballByBall || !ballByBall.length) {
-                console.log('No ball data found');
+            if (!data || !data.data) {
+                console.error('Invalid match data structure for match:', matchId);
+                console.log('Match data:', data);
                 return;
             }
             
+            // Try different paths for ball-by-ball data
+            let ballByBall = [];
+            
+            if (data.data.balls && data.data.balls.length > 0) {
+                ballByBall = data.data.balls;
+                console.log(`Found ${ballByBall.length} balls in data.data.balls`);
+            } else if (data.data.ballByBall && data.data.ballByBall.length > 0) {
+                ballByBall = data.data.ballByBall;
+                console.log(`Found ${ballByBall.length} balls in data.data.ballByBall`);
+            } else if (data.ballByBall && data.ballByBall.length > 0) {
+                ballByBall = data.ballByBall;
+                console.log(`Found ${ballByBall.length} balls in data.ballByBall`);
+            } else {
+                // Look for nested structure (innings -> overs -> balls)
+                console.log('Looking for nested structure...');
+                try {
+                    // Try data.data first
+                    if (data.data && Array.isArray(data.data)) {
+                        console.log('Found array in data.data');
+                        // This might be innings
+                        let allBalls = [];
+                        data.data.forEach((inning, idx) => {
+                            console.log(`Processing inning ${idx}`);
+                            if (inning.overs && Array.isArray(inning.overs)) {
+                                inning.overs.forEach((over, overIdx) => {
+                                    console.log(`Processing over ${overIdx} with ${over.balls?.length || 0} balls`);
+                                    if (over.balls && Array.isArray(over.balls)) {
+                                        allBalls.push(...over.balls);
+                                    }
+                                });
+                            } else if (inning.balls && Array.isArray(inning.balls)) {
+                                allBalls.push(...inning.balls);
+                            }
+                        });
+                        
+                        if (allBalls.length > 0) {
+                            ballByBall = allBalls;
+                            console.log(`Found ${ballByBall.length} balls in nested structure`);
+                        }
+                    }
+                    
+                    // If still empty, try data.ballByBall
+                    if (ballByBall.length === 0 && data.ballByBall && Array.isArray(data.ballByBall)) {
+                        console.log('Found array in data.ballByBall');
+                        let allBalls = [];
+                        data.ballByBall.forEach((inning, idx) => {
+                            console.log(`Processing inning ${idx}`);
+                            if (inning.overs && Array.isArray(inning.overs)) {
+                                inning.overs.forEach((over, overIdx) => {
+                                    if (over.balls && Array.isArray(over.balls)) {
+                                        allBalls.push(...over.balls);
+                                    }
+                                });
+                            } else if (inning.balls && Array.isArray(inning.balls)) {
+                                allBalls.push(...inning.balls);
+                            }
+                        });
+                        
+                        if (allBalls.length > 0) {
+                            ballByBall = allBalls;
+                            console.log(`Found ${ballByBall.length} balls in nested structure`);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error extracting balls from nested structure:', e);
+                }
+                
+                if (ballByBall.length === 0) {
+                    console.error('No ball-by-ball data found for match:', matchId);
+                    console.log('Data structure:', JSON.stringify(data));
+                    return;
+                }
+            }
+            
             // Process each ball directly
+            let processedBalls = 0;
             ballByBall.forEach(ball => {
-                processBall(ball, playerStats);
+                if (processBall(ball, playerStats)) {
+                    processedBalls++;
+                }
             });
+            
+            console.log(`Processed ${processedBalls} balls out of ${ballByBall.length} for match ${matchId}`);
+            console.log('Player stats after processing match:', Object.keys(playerStats).length);
         }
         
         function processBall(ball, playerStats) {
             // Get batter and bowler info
-            const batterId = ball.batsman?.id?.toString() || '';
-            const bowlerId = ball.bowler?.id?.toString() || '';
-            const batterName = ball.batsman?.name || '';
+            const batterId = getPlayerId(ball.batsman) || getPlayerId(ball.batter) || '';
+            const bowlerId = getPlayerId(ball.bowler) || '';
+            const batterName = ball.batsman?.name || ball.batter?.name || '';
             const bowlerName = ball.bowler?.name || '';
             
             // Skip if missing critical info
-            if (!batterId || !bowlerId) return;
+            if (!batterId || !bowlerId) {
+                console.log('Skipping ball due to missing batter or bowler ID:', ball);
+                return false;
+            }
             
             // Initialize player stats if needed
             [
@@ -320,35 +409,36 @@
                 
                 // Handle catches
                 if (wicketType === 'caught' && ball.wicket.fielders?.length > 0) {
-                    const fielderId = ball.wicket.fielders[0].id?.toString();
-                    const fielderName = ball.wicket.fielders[0].name;
-                    
-                    if (fielderId) {
-                        if (!playerStats[fielderId]) {
-                            playerStats[fielderId] = {
-                                name: fielderName,
-                                runs: 0,
-                                balls: 0,
-                                bowled_balls: 0,
-                                runs_conceded: 0,
-                                wickets: 0,
-                                wicket_bowled_or_lbw: 0,
-                                catches: 0,
-                                run_outs: 0
-                            };
+                    for (const fielder of ball.wicket.fielders) {
+                        const fielderId = getPlayerId(fielder);
+                        if (fielderId) {
+                            if (!playerStats[fielderId]) {
+                                playerStats[fielderId] = {
+                                    name: fielder.name || 'Unknown Fielder',
+                                    runs: 0,
+                                    balls: 0,
+                                    bowled_balls: 0,
+                                    runs_conceded: 0,
+                                    wickets: 0,
+                                    wicket_bowled_or_lbw: 0,
+                                    catches: 0,
+                                    run_outs: 0
+                                };
+                            }
+                            playerStats[fielderId].catches += 1;
+                            break; // Only count one catch per wicket
                         }
-                        playerStats[fielderId].catches += 1;
                     }
                 }
                 
                 // Handle run outs
                 if (wicketType === 'run out') {
                     (ball.wicket.fielders || []).forEach(fielder => {
-                        const fielderId = fielder.id?.toString();
+                        const fielderId = getPlayerId(fielder);
                         if (fielderId) {
                             if (!playerStats[fielderId]) {
                                 playerStats[fielderId] = {
-                                    name: fielder.name,
+                                    name: fielder.name || 'Unknown Fielder',
                                     runs: 0,
                                     balls: 0,
                                     bowled_balls: 0,
@@ -364,19 +454,66 @@
                     });
                 }
             }
+            
+            return true;
+        }
+        
+        // Helper function to extract player ID from various formats
+        function getPlayerId(player) {
+            if (!player) return null;
+            
+            // Try different fields that might contain the ID
+            const possibleIdFields = ['id', 'playerId', 'player_id'];
+            
+            for (const field of possibleIdFields) {
+                if (player[field]) {
+                    return player[field].toString();
+                }
+            }
+            
+            // If the player is itself a string, it might be an ID
+            if (typeof player === 'string') {
+                return player;
+            }
+            
+            return null;
         }
         
         function calculateOwnerStats(playerStats, teamOwnerMapping) {
+            console.log('Calculating owner stats...');
             const ownerStats = {};
+            let playersWithOwners = 0;
+            let playersWithoutOwners = 0;
+            
+            // If player stats are empty, create dummy stats for all players in the mapping
+            if (Object.keys(playerStats).length === 0) {
+                console.log('No player stats found, creating dummy entries from team mapping');
+                Object.entries(teamOwnerMapping).forEach(([playerId, info]) => {
+                    playerStats[playerId] = {
+                        name: info.player_name,
+                        runs: 0,
+                        balls: 0,
+                        bowled_balls: 0,
+                        runs_conceded: 0,
+                        wickets: 0,
+                        wicket_bowled_or_lbw: 0,
+                        catches: 0,
+                        run_outs: 0,
+                        score: 4 // Base score
+                    };
+                });
+            }
             
             // Process each player's stats
             Object.entries(playerStats).forEach(([playerId, stats]) => {
-                const score = calculatePlayerScore(stats);
-                stats.score = score;
+                if (!stats.score) {
+                    stats.score = calculatePlayerScore(stats);
+                }
                 
                 // Find owner info
                 const ownerInfo = teamOwnerMapping[playerId];
                 if (ownerInfo) {
+                    playersWithOwners++;
                     const { owner, player_name, team_id } = ownerInfo;
                     
                     // Initialize owner entry if needed
@@ -389,12 +526,17 @@
                     
                     // Add player stats to owner's list
                     ownerStats[owner].players.push({
-                        name: player_name,
+                        name: player_name, // Use the name from mapping
                         teamId: team_id,
                         ...stats
                     });
+                } else {
+                    playersWithoutOwners++;
+                    console.log(`Player ${playerId} (${stats.name}) has no owner mapping`);
                 }
             });
+            
+            console.log(`Players with owners: ${playersWithOwners}, without owners: ${playersWithoutOwners}`);
             
             // Calculate total scores for each owner
             Object.values(ownerStats).forEach(owner => {
