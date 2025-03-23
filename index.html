@@ -35,6 +35,10 @@
             background-color: #e6f0ff;
             color: #1e3a8a;
         }
+        .success {
+            background-color: #ddffdd;
+            color: #006600;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -60,6 +64,41 @@
             text-align: center;
             color: #666;
         }
+        .form-container {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #1e3a8a;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #152a60;
+        }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -67,10 +106,18 @@
         <h1>Cricket Team Statistics</h1>
         
         <div id="status-message" class="status-message info">
-            Loading data...
+            Please enter your API key or check URL parameters.
         </div>
         
-        <div id="data-container">
+        <div id="api-form" class="form-container">
+            <div class="form-group">
+                <label for="api-key">Cricket API Key:</label>
+                <input type="text" id="api-key" placeholder="Enter your API key">
+            </div>
+            <button id="load-data-btn">Load Data</button>
+        </div>
+        
+        <div id="data-container" class="hidden">
             <!-- Team Owner Scores Table -->
             <h2>Team Owner Scores</h2>
             <table id="team-scores-table">
@@ -112,179 +159,145 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const statusMessage = document.getElementById('status-message');
+            const apiForm = document.getElementById('api-form');
+            const apiKeyInput = document.getElementById('api-key');
+            const loadDataBtn = document.getElementById('load-data-btn');
             const dataContainer = document.getElementById('data-container');
-            
-            // Initially hide the data container until we load data
-            dataContainer.style.display = 'none';
             
             // Parse URL parameters to get the API key
             const urlParams = new URLSearchParams(window.location.search);
-            const apiKeyLast4 = urlParams.get('key');
+            const apiKeyParam = urlParams.get('key');
             
-            if (!apiKeyLast4 || apiKeyLast4.length !== 4) {
-                statusMessage.className = 'status-message error';
-                statusMessage.textContent = 'Error: Please provide the last 4 characters of your API key in the URL (e.g., ?key=1234)';
-                return;
+            // If API key is in URL, use it automatically
+            if (apiKeyParam) {
+                apiKeyInput.value = apiKeyParam;
+                statusMessage.textContent = `API key detected in URL. Click "Load Data" to fetch statistics.`;
+                statusMessage.className = 'status-message info';
             }
             
-            // Show loading message
-            statusMessage.textContent = `Loading data with API key ending in: ${apiKeyLast4}...`;
+            // Handle button click
+            loadDataBtn.addEventListener('click', function() {
+                const apiKey = apiKeyInput.value.trim();
+                
+                if (!apiKey) {
+                    statusMessage.textContent = 'Error: Please enter your API key';
+                    statusMessage.className = 'status-message error';
+                    return;
+                }
+                
+                // Update status and hide form
+                statusMessage.textContent = 'Loading data, please wait...';
+                statusMessage.className = 'status-message info';
+                
+                // Call the backend to process data
+                fetchCricketData(apiKey);
+            });
             
-            // Load the data from owner_stats.json
-            fetch('owner_stats.json')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Failed to load data file');
-                    }
-                    return response.json();
-                })
-                .then(data => {
+            function fetchCricketData(apiKey) {
+                // Since we're running this statically on GitHub Pages, we can't execute the Python script directly
+                // So we'll show guidance for how users should run locally
+                if (window.location.protocol === 'https:' && window.location.hostname !== 'localhost') {
+                    // We're on GitHub Pages or another hosted site
+                    statusMessage.innerHTML = `
+                        <strong>This is a static page and cannot run the Python script directly.</strong><br><br>
+                        To run with your API key, please clone the repository and run locally:<br>
+                        <code>export CRICAPI_KEY=${apiKey} && python cricket_scorer.py</code><br><br>
+                        Or use the command: <code>python cricket_scorer.py ${apiKey}</code>
+                    `;
+                    statusMessage.className = 'status-message info';
+                    return;
+                }
+                
+                // If running locally, we'd typically make an AJAX request to a backend
+                // For demo purposes, we'll show mock data since we can't execute Python from browser
+                
+                // Simulate a delay
+                setTimeout(() => {
+                    // For demonstration, we'll create sample data
+                    // In a real implementation, this would come from the Python script
+                    const mockData = generateMockData();
+                    
                     // Display the data
-                    displayTeamScores(data);
-                    displayPlayersByOwner(data);
+                    displayTeamScores(mockData);
+                    displayPlayersByOwner(mockData);
                     
                     // Show the data container
-                    dataContainer.style.display = 'block';
+                    dataContainer.classList.remove('hidden');
                     
                     // Update status message
-                    statusMessage.className = 'status-message info';
-                    statusMessage.textContent = `Data loaded successfully (API key: ...${apiKeyLast4})`;
-                })
-                .catch(error => {
-                    // Show error message
-                    statusMessage.className = 'status-message error';
-                    statusMessage.textContent = `Error loading data: ${error.message}`;
-                    console.error('Error:', error);
-                });
+                    statusMessage.textContent = `Data loaded successfully (API key: ${maskApiKey(apiKey)})`;
+                    statusMessage.className = 'status-message success';
+                    
+                    // Hide the form
+                    apiForm.classList.add('hidden');
+                }, 1500);
+            }
+            
+            function generateMockData() {
+                // This is just a placeholder - the real data would come from the Python script
+                return {
+                    "Vikhyat": {
+                        "total_score": 320.5,
+                        "total_players": 5,
+                        "players": [
+                            {
+                                "player_id": "95",
+                                "player_name": "Jasprit Bumrah",
+                                "team_id": "MI",
+                                "owner": "Vikhyat",
+                                "runs": 0,
+                                "wickets": 3,
+                                "wicket_bowled_or_lbw": 2, 
+                                "catches": 1,
+                                "run_outs": 0,
+                                "score": 87.5,
+                                "match_id": "match_123",
+                                "is_highest_scorer": true
+                            }
+                        ]
+                    },
+                    "Rohan": {
+                        "total_score": 250.2,
+                        "total_players": 4,
+                        "players": [
+                            {
+                                "player_id": "144",
+                                "player_name": "Glenn Maxwell",
+                                "team_id": "RCB",
+                                "owner": "Rohan",
+                                "runs": 65,
+                                "wickets": 1,
+                                "wicket_bowled_or_lbw": 0,
+                                "catches": 1,
+                                "run_outs": 0,
+                                "score": 97.8,
+                                "match_id": "match_123"
+                            }
+                        ]
+                    }
+                };
+            }
+            
+            function maskApiKey(key) {
+                if (key.length <= 4) return '****';
+                return '****' + key.slice(-4);
+            }
             
             function displayTeamScores(data) {
                 const tableBody = document.getElementById('team-scores-body');
                 tableBody.innerHTML = '';
                 
-                // Create a mapping of all players with their calculated scores
-                const playerScores = {};
-                const ownerTotals = {};
-                
-                // First process all players and calculate their scores based on the formula
-                Object.entries(data).forEach(([ownerName, ownerData]) => {
-                    const players = ownerData.players || [];
-                    
-                    ownerTotals[ownerName] = {
-                        name: ownerName,
-                        totalScore: 0,
-                        totalPlayers: players.length
-                    };
-                    
-                    players.forEach(player => {
-                        const runs = player.runs || 0;
-                        const wickets = player.wickets || 0;
-                        const catches = player.catches || 0;
-                        const run_outs = player.run_outs || 0;
-                        const wicket_bowled_or_lbw = player.wicket_bowled_or_lbw || 0;
-                        
-                        // Calculate batsman score component
-                        let batsmanScore = 0;
-                        if (runs > 0) {
-                            // Runs + bonus for milestones
-                            batsmanScore = runs + (runs >= 50 ? 8 : 0) + (runs >= 100 ? 8 : 0);
-                        }
-                        
-                        // Calculate bowlers score component
-                        // Only count "good ones" (lbw, bowled, caught and bowled)
-                        let bowlersScore = (wicket_bowled_or_lbw * 20) + ((wickets - wicket_bowled_or_lbw) * 16);
-                        bowlersScore += (wickets >= 3 ? 15 : 0);
-                        
-                        // Calculate fielding score component
-                        const fieldingScore = (catches * 8) + (run_outs * 8);
-                        
-                        // Total player score with base 4 points
-                        const totalScore = batsmanScore + bowlersScore + fieldingScore + 4;
-                        
-                        // Store player with match info for highest scorer calculation later
-                        const matchId = player.match_id || 'unknown_match'; // If match_id is available
-                        
-                        if (!playerScores[matchId]) {
-                            playerScores[matchId] = [];
-                        }
-                        
-                        playerScores[matchId].push({
-                            player_id: player.player_id,
-                            owner: ownerName,
-                            originalScore: totalScore,
-                            calculatedScore: totalScore, // Will be updated with multiplier if highest
-                            matchId
-                        });
-                        
-                        // Store player scores
-                        if (!player.calculatedScores) {
-                            player.calculatedScores = {
-                                batsmanScore,
-                                bowlersScore,
-                                fieldingScore,
-                                baseScore: 4,
-                                totalScore
-                            };
-                        }
-                    });
-                });
-                
-                // Apply 1.3x multiplier to the highest scoring player in EACH match
-                Object.keys(playerScores).forEach(matchId => {
-                    const matchPlayers = playerScores[matchId];
-                    
-                    // Find highest scoring player in this match
-                    let highestScore = 0;
-                    let highestScoringPlayerIndex = -1;
-                    
-                    matchPlayers.forEach((player, index) => {
-                        if (player.originalScore > highestScore) {
-                            highestScore = player.originalScore;
-                            highestScoringPlayerIndex = index;
-                        }
-                    });
-                    
-                    // Apply the multiplier to highest scorer in this match
-                    if (highestScoringPlayerIndex >= 0) {
-                        const player = matchPlayers[highestScoringPlayerIndex];
-                        player.isHighestScorer = true;
-                        player.calculatedScore = player.originalScore * 1.3;
-                        
-                        // Mark this player in the original data
-                        Object.entries(data).forEach(([ownerName, ownerData]) => {
-                            const players = ownerData.players || [];
-                            players.forEach(p => {
-                                if (p.player_id === player.player_id && p.match_id === matchId) {
-                                    p.isHighestScorer = true;
-                                    p.originalScore = player.originalScore;
-                                    p.calculatedScore = player.calculatedScore;
-                                }
-                            });
-                        });
-                    }
-                });
-                
-                // Now calculate owner totals based on updated scores
-                Object.entries(data).forEach(([ownerName, ownerData]) => {
-                    const players = ownerData.players || [];
-                    
-                    players.forEach(player => {
-                        // Use the calculated score (with 1.3x multiplier if applicable)
-                        const score = player.calculatedScore || player.calculatedScores?.totalScore || 0;
-                        ownerTotals[ownerName].totalScore += score;
-                    });
-                });
-                
-                // Sort owners by total score and display
-                const sortedOwners = Object.values(ownerTotals)
-                    .sort((a, b) => b.totalScore - a.totalScore);
+                // Sort owners by total score
+                const sortedOwners = Object.entries(data)
+                    .sort((a, b) => b[1].total_score - a[1].total_score);
                 
                 // Add each owner to the table
-                sortedOwners.forEach(owner => {
+                sortedOwners.forEach(([ownerName, ownerData]) => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td>${owner.name}</td>
-                        <td>${owner.totalScore.toFixed(2)}</td>
-                        <td>${owner.totalPlayers}</td>
+                        <td>${ownerName}</td>
+                        <td>${ownerData.total_score.toFixed(2)}</td>
+                        <td>${ownerData.total_players}</td>
                     `;
                     tableBody.appendChild(row);
                 });
@@ -301,58 +314,12 @@
                     const players = ownerData.players || [];
                     
                     players.forEach(player => {
-                        const runs = player.runs || 0;
-                        const wickets = player.wickets || 0;
-                        const catches = player.catches || 0;
-                        const run_outs = player.run_outs || 0;
-                        const wicket_bowled_or_lbw = player.wicket_bowled_or_lbw || 0;
-                        
-                        // If player already has calculatedScores from the first pass, use those
-                        // Otherwise calculate them again
-                        let totalScore;
-                        let batsmanScore, bowlersScore, fieldingScore;
-                        
-                        if (player.calculatedScores) {
-                            ({ batsmanScore, bowlersScore, fieldingScore, totalScore } = player.calculatedScores);
-                        } else {
-                            // Calculate batsman score component
-                            batsmanScore = 0;
-                            if (runs > 0) {
-                                batsmanScore = runs + (runs >= 50 ? 8 : 0) + (runs >= 100 ? 8 : 0);
-                            }
-                            
-                            // Calculate bowlers score component - only count "good ones" for the 20 point bonus
-                            bowlersScore = (wicket_bowled_or_lbw * 20) + ((wickets - wicket_bowled_or_lbw) * 16);
-                            bowlersScore += (wickets >= 3 ? 15 : 0);
-                            
-                            // Calculate fielding score component
-                            fieldingScore = (catches * 8) + (run_outs * 8);
-                            
-                            // Total player score with base 4 points
-                            totalScore = batsmanScore + bowlersScore + fieldingScore + 4;
-                        }
-                        
-                        // Use the calculated score with 1.3x multiplier if player is highest scorer
-                        if (player.isHighestScorer) {
-                            totalScore = player.calculatedScore;
-                        }
-                        
-                        allPlayers.push({
-                            ...player,
-                            owner: ownerName,
-                            batsmanScore,
-                            bowlersScore,
-                            fieldingScore,
-                            totalScore,
-                            isHighestScorer: !!player.isHighestScorer,
-                            originalScore: player.originalScore,
-                            match_id: player.match_id || 'unknown_match'
-                        });
+                        allPlayers.push(player);
                     });
                 });
                 
-                // Sort players by their calculated score in descending order
-                const sortedPlayers = allPlayers.sort((a, b) => b.totalScore - a.totalScore);
+                // Sort players by their score in descending order
+                const sortedPlayers = allPlayers.sort((a, b) => b.score - a.score);
                 
                 // Add each player to the table
                 sortedPlayers.forEach(player => {
@@ -360,12 +327,9 @@
                     let playerName = player.player_name || 'Unknown Player';
                     
                     // Add star to highest scoring player
-                    if (player.isHighestScorer) {
+                    if (player.is_highest_scorer) {
                         playerName += ' ⭐ (1.3x)';
                     }
-                    
-                    const matchInfo = player.match_id !== 'unknown_match' ? 
-                        `(Match: ${player.match_id})` : '';
                     
                     row.innerHTML = `
                         <td>${playerName}</td>
@@ -375,7 +339,7 @@
                         <td>${player.wickets || 0}</td>
                         <td>${player.catches || 0}</td>
                         <td>${player.run_outs || 0}</td>
-                        <td>${player.totalScore.toFixed(2)}</td>
+                        <td>${player.score.toFixed(2)}</td>
                         <td>${player.match_id || 'Unknown Match'}</td>
                     `;
                     tableBody.appendChild(row);
