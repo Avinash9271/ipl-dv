@@ -184,13 +184,13 @@
                     throw new Error(data.info || data.error || 'API returned unsuccessful status');
                 }
                 
-                // Get only matches from this series
-                const matches = data.data || [];
+                // Get only started matches from this series
+                const matches = (data.data || []).filter(match => match.matchStarted === true);
                 if (matches.length === 0) {
-                    throw new Error('No IPL 2025 matches found');
+                    throw new Error('No started IPL 2025 matches found');
                 }
 
-                console.log('IPL 2025 matches:', matches); // Debug log
+                console.log('Started IPL 2025 matches:', matches); // Debug log
                 return matches;
             } catch (error) {
                 console.error('Series API Error:', error);
