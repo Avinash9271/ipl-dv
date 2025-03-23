@@ -1,0 +1,156 @@
+{
+  "Rohan": {
+    "total_runs": 4,
+    "total_wickets": 0,
+    "total_players": 1,
+    "players": [
+      {
+        "player_id": 75,
+        "player_name": "Quinton de Kock",
+        "team_id": 49,
+        "runs": 4,
+        "wickets": 0
+      }
+    ]
+  },
+  "Vikhyat": {
+    "total_runs": 10,
+    "total_wickets": 0,
+    "total_players": 2,
+    "players": [
+      {
+        "player_id": 187,
+        "player_name": "Josh Hazlewood",
+        "team_id": 44,
+        "runs": 0,
+        "wickets": 0
+      },
+      {
+        "player_id": 201,
+        "player_name": "Devdutt Padikkal",
+        "team_id": 44,
+        "runs": 10,
+        "wickets": 0
+      }
+    ]
+  },
+  "Shreyansh": {
+    "total_runs": 48,
+    "total_wickets": 0,
+    "total_players": 3,
+    "players": [
+      {
+        "player_id": 83,
+        "player_name": "Sunil Narine",
+        "team_id": 46,
+        "runs": 44,
+        "wickets": 0
+      },
+      {
+        "player_id": 80,
+        "player_name": "Andre Russell",
+        "team_id": 46,
+        "runs": 4,
+        "wickets": 0
+      },
+      {
+        "player_id": 85,
+        "player_name": "Vaibhav Arora",
+        "team_id": 46,
+        "runs": 0,
+        "wickets": 0
+      }
+    ]
+  },
+  "Sai": {
+    "total_runs": 71,
+    "total_wickets": 0,
+    "total_players": 6,
+    "players": [
+      {
+        "player_id": 186,
+        "player_name": "Yash Dayal",
+        "team_id": 43,
+        "runs": 0,
+        "wickets": 0
+      },
+      {
+        "player_id": 193,
+        "player_name": "Krunal Pandya",
+        "team_id": 43,
+        "runs": 0,
+        "wickets": 0
+      },
+      {
+        "player_id": 192,
+        "player_name": "Suyash Sharma",
+        "team_id": 43,
+        "runs": 0,
+        "wickets": 0
+      },
+      {
+        "player_id": 74,
+        "player_name": "Rinku Singh",
+        "team_id": 43,
+        "runs": 12,
+        "wickets": 0
+      },
+      {
+        "player_id": 185,
+        "player_name": "Virat Kohli",
+        "team_id": 43,
+        "runs": 59,
+        "wickets": 0
+      },
+      {
+        "player_id": 84,
+        "player_name": "Varun Chakaravarthy",
+        "team_id": 43,
+        "runs": 0,
+        "wickets": 0
+      }
+    ]
+  },
+  "Ayush": {
+    "total_runs": 6,
+    "total_wickets": 0,
+    "total_players": 1,
+    "players": [
+      {
+        "player_id": 78,
+        "player_name": "Venkatesh Iyer",
+        "team_id": 50,
+        "runs": 6,
+        "wickets": 0
+      }
+    ]
+  },
+  "Adi": {
+    "total_runs": 30,
+    "total_wickets": 0,
+    "total_players": 1,
+    "players": [
+      {
+        "player_id": 77,
+        "player_name": "Angkrish Raghuvanshi",
+        "team_id": 42,
+        "runs": 30,
+        "wickets": 0
+      }
+    ]
+  },
+  "Dhruv": {
+    "total_runs": 15,
+    "total_wickets": 0,
+    "total_players": 1,
+    "players": [
+      {
+        "player_id": 190,
+        "player_name": "Liam Livingstone",
+        "team_id": 48,
+        "runs": 15,
+        "wickets": 0
+      }
+    ]
+  }
+}
