@@ -125,11 +125,7 @@
             try {
                 // Try GitHub Pages path first with timestamp
                 const response = await fetch(addTimestamp('/ipl-dv/teams.csv'), {
-                    cache: 'no-store',
-                    headers: {
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache'
-                    }
+                    cache: 'no-store'
                 });
                 if (!response.ok) {
                     throw new Error('Failed to load teams.csv');
@@ -140,11 +136,7 @@
                 // Fallback to local path with timestamp
                 try {
                     const response = await fetch(addTimestamp('teams.csv'), {
-                        cache: 'no-store',
-                        headers: {
-                            'Cache-Control': 'no-cache',
-                            'Pragma': 'no-cache'
-                        }
+                        cache: 'no-store'
                     });
                     if (!response.ok) {
                         throw new Error('Failed to load teams.csv');
@@ -179,11 +171,7 @@
             try {
                 // Add timestamp to prevent caching
                 const response = await fetch(addTimestamp(`https://api.cricapi.com/v1/series_info?apikey=${apiKey}&id=${seriesId}`), {
-                    cache: 'no-store',
-                    headers: {
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache'
-                    }
+                    cache: 'no-store'
                 });
                 const data = await response.json();
                 console.log('Series API Response:', data); // Debug log
@@ -213,11 +201,7 @@
             try {
                 // Add timestamp to prevent caching
                 const response = await fetch(addTimestamp(`https://api.cricapi.com/v1/match_bbb?apikey=${apiKey}&id=${matchId}`), {
-                    cache: 'no-store',
-                    headers: {
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache'
-                    }
+                    cache: 'no-store'
                 });
                 const data = await response.json();
                 console.log('Match API Response:', data); // Debug log
