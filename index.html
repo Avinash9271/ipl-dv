@@ -3,633 +3,473 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    <title>Cricket Stats</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Cricket Player Dashboard</title>
     <style>
         body {
-            padding: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        }
-        .table {
-            margin-top: 20px;
-        }
-        #loadingMessage {
-            display: none;
-            margin: 20px 0;
-        }
-        #results {
-            display: none;
-        }
-        .input-group {
-            max-width: 600px;
-            margin: 0 auto;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
         }
         h1 {
-            margin-bottom: 30px;
-            color: #333;
+            color: #0056b3;
+            text-align: center;
         }
-        .alert {
-            max-width: 600px;
+        #loading {
+            text-align: center;
+            font-size: 18px;
+            margin: 30px 0;
+            color: #666;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #0056b3;
+            color: white;
+            position: sticky;
+            top: 0;
+        }
+        tr:hover {
+            background-color: #f1f8ff;
+        }
+        .error {
+            color: red;
+            text-align: center;
+            padding: 20px;
+            background-color: #ffeeee;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .refresh-btn {
+            background-color: #0056b3;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: block;
             margin: 20px auto;
         }
-        .table th {
-            background-color: #f8f9fa;
+        .refresh-btn:hover {
+            background-color: #003d7a;
         }
-        .table-striped tbody tr:nth-of-type(odd) {
-            background-color: rgba(0,0,0,.02);
-        }
-        .star {
-            color: gold;
-            margin-left: 5px;
+        .stats-info {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #666;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 class="text-center">Cricket Stats</h1>
-        
-        <div id="loadingMessage" class="alert alert-info text-center">
-            Loading data from CricAPI...
-        </div>
-        
-        <div id="results"></div>
+        <h1>Cricket Player Dashboard</h1>
+        <div class="stats-info">Last updated: <span id="update-time"></span></div>
+        <div id="loading">Loading player data...</div>
+        <div id="error-container"></div>
+        <div id="player-table-container"></div>
+        <button class="refresh-btn" onclick="refreshData()">Refresh Data</button>
     </div>
 
     <script>
-        // Full API key with last 4 characters matching the URL parameter
-        const FULL_API_KEY = "282bffef-9065-43b3-91f0-df54dec227fd";
-        
-        // IPL 2025 Series ID
+        // Constants
+        const API_KEY = "27fd7f41-1a6e-4aff-b641-a4b34cc3fc25";
         const IPL_2025_SERIES_ID = "d5a498c8-7596-4b93-8ab0-e0efc3345312";
         
-        // Add timestamp to prevent caching
-        function addTimestamp(url) {
-            return `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
-        }
-
-        // Auto refresh every 5 minutes
-        setInterval(() => {
-            window.location.reload();
-        }, 300000);
+        // Variables to store data
+        let teamOwnerMapping = {};
+        let playerStats = {};
+        let matchesProcessed = 0;
         
-        // Start fetching data immediately
-        document.getElementById('loadingMessage').style.display = 'block';
-        document.getElementById('results').style.display = 'none';
-        fetchData(FULL_API_KEY);
-
-        async function fetchData(apiKey) {            
-            document.getElementById('loadingMessage').textContent = 'Loading data from CricAPI...';
-            
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchData();
+            // Auto-refresh every 5 minutes
+            setInterval(fetchData, 5 * 60 * 1000);
+        });
+        
+        // Function to refresh data manually
+        function refreshData() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('player-table-container').innerHTML = '';
+            document.getElementById('error-container').innerHTML = '';
+            fetchData();
+        }
+        
+        // Main function to fetch all required data
+        async function fetchData() {
             try {
-                // Fetch series matches first to validate API key
-                const matches = await fetchSeriesMatches(apiKey, IPL_2025_SERIES_ID);
-                if (!matches || matches.length === 0) {
-                    throw new Error('No matches found for IPL 2025');
+                // Reset data
+                playerStats = {};
+                matchesProcessed = 0;
+                
+                // Step 1: Load team owner mapping from CSV
+                await fetchTeamOwnerMapping();
+                console.log("Team owner mapping loaded:", Object.keys(teamOwnerMapping).length, "players");
+                
+                // Initialize player stats with base values from team mapping
+                initializePlayerStats();
+                
+                // Step 2: Fetch all matches for the series
+                const matches = await fetchSeriesMatches(API_KEY, IPL_2025_SERIES_ID);
+                console.log("Fetched matches:", matches.length);
+                
+                // Step 3: Process each match to calculate player stats
+                if (matches && matches.length > 0) {
+                    const matchPromises = matches.map(match => fetchMatchDetails(API_KEY, match.id));
+                    const matchResults = await Promise.allSettled(matchPromises);
+                    
+                    matchResults.forEach((result, index) => {
+                        if (result.status === 'fulfilled' && result.value) {
+                            processMatchData(result.value);
+                            matchesProcessed++;
+                        } else {
+                            console.error("Failed to fetch match details:", result.reason);
+                        }
+                    });
                 }
                 
-                // Fetch team owner mapping
-                const teamOwnerMapping = await fetchTeamOwnerMapping();
-                console.log('Team mapping keys count:', Object.keys(teamOwnerMapping).length);
+                // Step 4: Calculate and display player scores
+                calculatePlayerScores();
+                displayPlayerTable();
                 
-                // Initialize global player stats
-                const playerStats = {};
+                // Update the timestamp
+                const now = new Date();
+                document.getElementById('update-time').textContent = now.toLocaleString();
+                document.getElementById('loading').style.display = 'none';
                 
-                // Process each match
-                for (const match of matches) {
-                    document.getElementById('loadingMessage').textContent = `Loading match details for ${match.name}...`;
-                    const matchDetails = await fetchMatchDetails(apiKey, match.id);
-                    processMatchDetails(matchDetails, match.id, teamOwnerMapping, playerStats);
-                }
-                
-                console.log('Final player stats:', playerStats);
-                console.log('Player stats keys count:', Object.keys(playerStats).length);
-                
-                // Calculate owner stats directly from player stats
-                const ownerStats = calculateOwnerStats(playerStats, teamOwnerMapping);
-                console.log('Owner stats:', ownerStats);
-                console.log('Owner stats keys count:', Object.keys(ownerStats).length);
-                
-                // Display results
-                displayResults(ownerStats);
-                
-                document.getElementById('loadingMessage').style.display = 'none';
-                document.getElementById('results').style.display = 'block';
             } catch (error) {
-                console.error('Error:', error);
-                document.getElementById('loadingMessage').innerHTML = `
-                    <div class="alert alert-danger">
-                        Error: ${error.message}
+                console.error("Error fetching data:", error);
+                document.getElementById('error-container').innerHTML = `
+                    <div class="error">
+                        <h3>Error loading data</h3>
+                        <p>${error.message}</p>
                     </div>
                 `;
+                document.getElementById('loading').style.display = 'none';
             }
         }
         
+        // Function to fetch team-owner mapping from CSV
         async function fetchTeamOwnerMapping() {
             try {
-                // Try GitHub Pages path first with timestamp
-                console.log('Attempting to fetch teams.csv from GitHub Pages...');
-                const response = await fetch(addTimestamp('/ipl-dv/teams.csv'), {
+                console.log("Fetching team owner mapping");
+                // First try to fetch from GitHub Pages
+                const response = await fetch(`teams.csv?t=${Date.now()}`, {
                     cache: 'no-store'
                 });
+                
                 if (!response.ok) {
-                    console.error('GitHub Pages fetch failed:', response.status, response.statusText);
-                    throw new Error('Failed to load teams.csv');
+                    throw new Error(`Failed to fetch teams.csv: ${response.status}`);
                 }
-                const text = await response.text();
-                console.log('Teams CSV content:', text); // Debug log
-                const mapping = parseTeamOwnerMapping(text);
-                console.log('Parsed team mapping:', mapping); // Debug log
-                return mapping;
+                
+                const csvText = await response.text();
+                console.log("CSV text length:", csvText.length);
+                teamOwnerMapping = parseTeamOwnerMapping(csvText);
+                
             } catch (error) {
-                console.error('GitHub Pages fetch error:', error);
-                // Fallback to local path with timestamp
-                try {
-                    console.log('Attempting to fetch teams.csv from local path...');
-                    const response = await fetch(addTimestamp('teams.csv'), {
-                        cache: 'no-store'
-                    });
-                    if (!response.ok) {
-                        console.error('Local fetch failed:', response.status, response.statusText);
-                        throw new Error('Failed to load teams.csv');
-                    }
-                    const text = await response.text();
-                    console.log('Teams CSV content:', text); // Debug log
-                    const mapping = parseTeamOwnerMapping(text);
-                    console.log('Parsed team mapping:', mapping); // Debug log
-                    return mapping;
-                } catch (secondError) {
-                    console.error('Local fetch error:', secondError);
-                    throw new Error('Could not load team ownership data. Please check if teams.csv exists.');
-                }
+                console.error("Error fetching team-owner mapping:", error);
+                throw error;
             }
         }
-
+        
+        // Function to parse CSV text into team-owner mapping
         function parseTeamOwnerMapping(csvText) {
-            console.log('Starting CSV parsing...');
-            const lines = csvText.trim().split('\n');
+            console.log("Parsing team owner mapping");
             const mapping = {};
             
-            // Skip header row
-            for (let i = 1; i < lines.length; i++) {
+            // Split the CSV text into lines
+            const lines = csvText.trim().split('\n');
+            console.log("CSV lines:", lines.length);
+            
+            // Process each line
+            for (let i = 1; i < lines.length; i++) { // Skip header row
                 const line = lines[i].trim();
-                if (!line) continue;
+                if (!line) continue; // Skip empty lines
                 
                 const values = line.split(',');
                 if (values.length >= 8) {
-                    const player_id = values[4].toString();
-                    const team_id = values[5].toString();
-                    const player_name = values[6];
-                    const owner = values[7];
+                    // Extract values from CSV columns
+                    const player_id = String(values[4]).trim();
+                    const team_id = String(values[5]).trim();
+                    const player_name = values[6].trim();
+                    const owner = values[7].trim();
                     
-                    if (player_id && owner) {
-                        mapping[player_id] = {
-                            player_name,
-                            team_id,
-                            owner
-                        };
-                    }
+                    // Store in mapping
+                    mapping[player_id] = {
+                        team_id: team_id,
+                        player_name: player_name,
+                        owner: owner
+                    };
+                    
+                    console.log(`Added player: ${player_id} - ${player_name} (${owner})`);
                 }
             }
             
-            console.log('Parsed mapping:', mapping);
+            console.log("Mapping created with", Object.keys(mapping).length, "players");
             return mapping;
         }
         
+        // Function to initialize player stats with base values
+        function initializePlayerStats() {
+            for (const playerId in teamOwnerMapping) {
+                const playerInfo = teamOwnerMapping[playerId];
+                playerStats[playerId] = {
+                    player_id: playerId,
+                    player_name: playerInfo.player_name,
+                    team_id: playerInfo.team_id,
+                    owner: playerInfo.owner,
+                    runs: 0,
+                    balls_faced: 0,
+                    wickets: 0,
+                    balls_bowled: 0,
+                    catches: 0,
+                    run_outs: 0,
+                    economy: 0,
+                    high_score: 0,
+                    strike_rate: 0,
+                    score: 0
+                };
+            }
+            console.log("Initialized player stats for", Object.keys(playerStats).length, "players");
+        }
+        
+        // Function to fetch series matches
         async function fetchSeriesMatches(apiKey, seriesId) {
             try {
-                console.log('Fetching series matches...');
-                // Add timestamp to prevent caching
-                const response = await fetch(addTimestamp(`https://api.cricapi.com/v1/series_info?apikey=${apiKey}&id=${seriesId}`), {
+                console.log(`Fetching matches for series: ${seriesId}`);
+                const url = `https://api.sports.staticcdn.com/cricket/series/${seriesId}/matches?apikey=${apiKey}&t=${Date.now()}`;
+                
+                const response = await fetch(url, {
+                    method: 'GET',
                     cache: 'no-store'
                 });
-                const data = await response.json();
-                console.log('Series API Response:', data);
                 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                if (data.status !== "success") {
-                    throw new Error(data.info || data.error || 'API returned unsuccessful status');
+                    throw new Error(`Failed to fetch series matches: ${response.status}`);
                 }
                 
-                // Get only started matches from this series
-                const matches = (data.data?.matchList || []).filter(match => match.matchStarted === true);
-                console.log('Found matches:', matches.length);
-                console.log('Match details:', matches);
+                const data = await response.json();
+                console.log(`Found ${data.matches ? data.matches.length : 0} matches`);
+                return data.matches || [];
                 
-                if (matches.length === 0) {
-                    throw new Error('No started IPL 2025 matches found');
-                }
-
-                return matches;
             } catch (error) {
-                console.error('Series API Error:', error);
-                throw new Error(`Failed to fetch series matches: ${error.message}`);
+                console.error("Error fetching series matches:", error);
+                return [];
             }
         }
         
+        // Function to fetch match details
         async function fetchMatchDetails(apiKey, matchId) {
             try {
-                console.log(`Fetching match details for ID: ${matchId}`);
-                const response = await fetch(addTimestamp(`https://api.cricapi.com/v1/match_bbb?apikey=${apiKey}&id=${matchId}`), {
+                console.log(`Fetching details for match: ${matchId}`);
+                const url = `https://api.sports.staticcdn.com/cricket/match/${matchId}/innings/?apikey=${apiKey}&t=${Date.now()}`;
+                
+                const response = await fetch(url, {
+                    method: 'GET',
                     cache: 'no-store'
                 });
-                const data = await response.json();
                 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                if (data.status !== "success") {
-                    throw new Error(data.info || data.error || 'API returned unsuccessful status');
+                    throw new Error(`Failed to fetch match details: ${response.status}`);
                 }
                 
-                console.log('Match data structure:', JSON.stringify(data.data, null, 2));
+                const data = await response.json();
                 return data;
+                
             } catch (error) {
-                console.error('Match API Error:', error);
-                throw new Error(`Failed to fetch match details: ${error.message}`);
+                console.error(`Error fetching match ${matchId} details:`, error);
+                return null;
             }
         }
         
-        function processMatchDetails(matchData, matchId, teamOwnerMapping, playerStats) {
-            const data = matchData.data || matchData;
+        // Function to process match data and update player stats
+        function processMatchData(matchData) {
+            console.log("Processing match data");
             
-            if (!data || !data.data) {
-                console.error('Invalid match data structure for match:', matchId);
-                console.log('Match data:', data);
+            if (!matchData || !matchData.innings) {
+                console.warn("No innings data found in match");
                 return;
             }
             
-            // Try different paths for ball-by-ball data
-            let ballByBall = [];
-            
-            if (data.data.balls && data.data.balls.length > 0) {
-                ballByBall = data.data.balls;
-                console.log(`Found ${ballByBall.length} balls in data.data.balls`);
-            } else if (data.data.ballByBall && data.data.ballByBall.length > 0) {
-                ballByBall = data.data.ballByBall;
-                console.log(`Found ${ballByBall.length} balls in data.data.ballByBall`);
-            } else if (data.ballByBall && data.ballByBall.length > 0) {
-                ballByBall = data.ballByBall;
-                console.log(`Found ${ballByBall.length} balls in data.ballByBall`);
-            } else {
-                // Look for nested structure (innings -> overs -> balls)
-                console.log('Looking for nested structure...');
-                try {
-                    // Try data.data first
-                    if (data.data && Array.isArray(data.data)) {
-                        console.log('Found array in data.data');
-                        // This might be innings
-                        let allBalls = [];
-                        data.data.forEach((inning, idx) => {
-                            console.log(`Processing inning ${idx}`);
-                            if (inning.overs && Array.isArray(inning.overs)) {
-                                inning.overs.forEach((over, overIdx) => {
-                                    console.log(`Processing over ${overIdx} with ${over.balls?.length || 0} balls`);
-                                    if (over.balls && Array.isArray(over.balls)) {
-                                        allBalls.push(...over.balls);
-                                    }
-                                });
-                            } else if (inning.balls && Array.isArray(inning.balls)) {
-                                allBalls.push(...inning.balls);
-                            }
-                        });
-                        
-                        if (allBalls.length > 0) {
-                            ballByBall = allBalls;
-                            console.log(`Found ${ballByBall.length} balls in nested structure`);
-                        }
-                    }
+            // Process each innings
+            matchData.innings.forEach(innings => {
+                if (!innings.overs) return;
+                
+                // Process each over
+                innings.overs.forEach(over => {
+                    if (!over.balls) return;
                     
-                    // If still empty, try data.ballByBall
-                    if (ballByBall.length === 0 && data.ballByBall && Array.isArray(data.ballByBall)) {
-                        console.log('Found array in data.ballByBall');
-                        let allBalls = [];
-                        data.ballByBall.forEach((inning, idx) => {
-                            console.log(`Processing inning ${idx}`);
-                            if (inning.overs && Array.isArray(inning.overs)) {
-                                inning.overs.forEach((over, overIdx) => {
-                                    if (over.balls && Array.isArray(over.balls)) {
-                                        allBalls.push(...over.balls);
-                                    }
-                                });
-                            } else if (inning.balls && Array.isArray(inning.balls)) {
-                                allBalls.push(...inning.balls);
-                            }
-                        });
-                        
-                        if (allBalls.length > 0) {
-                            ballByBall = allBalls;
-                            console.log(`Found ${ballByBall.length} balls in nested structure`);
-                        }
-                    }
-                } catch (e) {
-                    console.error('Error extracting balls from nested structure:', e);
-                }
-                
-                if (ballByBall.length === 0) {
-                    console.error('No ball-by-ball data found for match:', matchId);
-                    console.log('Data structure:', JSON.stringify(data));
-                    return;
-                }
-            }
-            
-            // Process each ball directly
-            let processedBalls = 0;
-            ballByBall.forEach(ball => {
-                if (processBall(ball, playerStats)) {
-                    processedBalls++;
-                }
-            });
-            
-            console.log(`Processed ${processedBalls} balls out of ${ballByBall.length} for match ${matchId}`);
-            console.log('Player stats after processing match:', Object.keys(playerStats).length);
-        }
-        
-        function processBall(ball, playerStats) {
-            // Get batter and bowler info
-            const batterId = getPlayerId(ball.batsman) || getPlayerId(ball.batter) || '';
-            const bowlerId = getPlayerId(ball.bowler) || '';
-            const batterName = ball.batsman?.name || ball.batter?.name || '';
-            const bowlerName = ball.bowler?.name || '';
-            
-            // Skip if missing critical info
-            if (!batterId || !bowlerId) {
-                console.log('Skipping ball due to missing batter or bowler ID:', ball);
-                return false;
-            }
-            
-            // Initialize player stats if needed
-            [
-                { id: batterId, name: batterName },
-                { id: bowlerId, name: bowlerName }
-            ].forEach(player => {
-                if (!playerStats[player.id]) {
-                    playerStats[player.id] = {
-                        name: player.name,
-                        runs: 0,
-                        balls: 0,
-                        bowled_balls: 0,
-                        runs_conceded: 0,
-                        wickets: 0,
-                        wicket_bowled_or_lbw: 0,
-                        catches: 0,
-                        run_outs: 0
-                    };
-                }
-            });
-            
-            // Update batter stats
-            const batterStats = playerStats[batterId];
-            const runs = parseInt(ball.runs || 0);
-            batterStats.runs += runs;
-            batterStats.balls += 1;
-            
-            // Update bowler stats
-            const bowlerStats = playerStats[bowlerId];
-            bowlerStats.bowled_balls += 1;
-            bowlerStats.runs_conceded += runs;
-            
-            // Handle wickets
-            if (ball.wicket) {
-                const wicketType = ball.wicket.type;
-                
-                if (['bowled', 'caught', 'lbw', 'stumped', 'caught and bowled', 'hit wicket'].includes(wicketType)) {
-                    bowlerStats.wickets += 1;
-                    
-                    if (['bowled', 'lbw', 'caught and bowled'].includes(wicketType)) {
-                        bowlerStats.wicket_bowled_or_lbw += 1;
-                    }
-                }
-                
-                // Handle catches
-                if (wicketType === 'caught' && ball.wicket.fielders?.length > 0) {
-                    for (const fielder of ball.wicket.fielders) {
-                        const fielderId = getPlayerId(fielder);
-                        if (fielderId) {
-                            if (!playerStats[fielderId]) {
-                                playerStats[fielderId] = {
-                                    name: fielder.name || 'Unknown Fielder',
-                                    runs: 0,
-                                    balls: 0,
-                                    bowled_balls: 0,
-                                    runs_conceded: 0,
-                                    wickets: 0,
-                                    wicket_bowled_or_lbw: 0,
-                                    catches: 0,
-                                    run_outs: 0
-                                };
-                            }
-                            playerStats[fielderId].catches += 1;
-                            break; // Only count one catch per wicket
-                        }
-                    }
-                }
-                
-                // Handle run outs
-                if (wicketType === 'run out') {
-                    (ball.wicket.fielders || []).forEach(fielder => {
-                        const fielderId = getPlayerId(fielder);
-                        if (fielderId) {
-                            if (!playerStats[fielderId]) {
-                                playerStats[fielderId] = {
-                                    name: fielder.name || 'Unknown Fielder',
-                                    runs: 0,
-                                    balls: 0,
-                                    bowled_balls: 0,
-                                    runs_conceded: 0,
-                                    wickets: 0,
-                                    wicket_bowled_or_lbw: 0,
-                                    catches: 0,
-                                    run_outs: 0
-                                };
-                            }
-                            playerStats[fielderId].run_outs += 1;
-                        }
+                    // Process each ball
+                    over.balls.forEach(ball => {
+                        processBall(ball);
                     });
-                }
-            }
-            
-            return true;
-        }
-        
-        // Helper function to extract player ID from various formats
-        function getPlayerId(player) {
-            if (!player) return null;
-            
-            // Try different fields that might contain the ID
-            const possibleIdFields = ['id', 'playerId', 'player_id'];
-            
-            for (const field of possibleIdFields) {
-                if (player[field]) {
-                    return player[field].toString();
-                }
-            }
-            
-            // If the player is itself a string, it might be an ID
-            if (typeof player === 'string') {
-                return player;
-            }
-            
-            return null;
-        }
-        
-        function calculateOwnerStats(playerStats, teamOwnerMapping) {
-            console.log('Calculating owner stats...');
-            const ownerStats = {};
-            let playersWithOwners = 0;
-            let playersWithoutOwners = 0;
-            
-            // If player stats are empty, create dummy stats for all players in the mapping
-            if (Object.keys(playerStats).length === 0) {
-                console.log('No player stats found, creating dummy entries from team mapping');
-                Object.entries(teamOwnerMapping).forEach(([playerId, info]) => {
-                    playerStats[playerId] = {
-                        name: info.player_name,
-                        runs: 0,
-                        balls: 0,
-                        bowled_balls: 0,
-                        runs_conceded: 0,
-                        wickets: 0,
-                        wicket_bowled_or_lbw: 0,
-                        catches: 0,
-                        run_outs: 0,
-                        score: 4 // Base score
-                    };
                 });
-            }
+            });
+        }
+        
+        // Function to process a single ball
+        function processBall(ball) {
+            if (!ball) return;
             
-            // Process each player's stats
-            Object.entries(playerStats).forEach(([playerId, stats]) => {
-                if (!stats.score) {
-                    stats.score = calculatePlayerScore(stats);
+            const batterId = String(ball.batter_id || ball.batsman_id || "");
+            const bowlerId = String(ball.bowler_id || "");
+            
+            // Process batter stats
+            if (batterId && playerStats[batterId]) {
+                const runs = parseInt(ball.runs || 0);
+                playerStats[batterId].runs += runs;
+                playerStats[batterId].balls_faced += 1;
+                
+                // Update high score
+                if (runs > playerStats[batterId].high_score) {
+                    playerStats[batterId].high_score = runs;
                 }
                 
-                // Find owner info
-                const ownerInfo = teamOwnerMapping[playerId];
-                if (ownerInfo) {
-                    playersWithOwners++;
-                    const { owner, player_name, team_id } = ownerInfo;
-                    
-                    // Initialize owner entry if needed
-                    if (!ownerStats[owner]) {
-                        ownerStats[owner] = {
-                            totalScore: 0,
-                            players: []
-                        };
-                    }
-                    
-                    // Add player stats to owner's list
-                    ownerStats[owner].players.push({
-                        name: player_name, // Use the name from mapping
-                        teamId: team_id,
-                        ...stats
-                    });
-                } else {
-                    playersWithoutOwners++;
-                    console.log(`Player ${playerId} (${stats.name}) has no owner mapping`);
+                // Update strike rate
+                if (playerStats[batterId].balls_faced > 0) {
+                    playerStats[batterId].strike_rate = 
+                        (playerStats[batterId].runs / playerStats[batterId].balls_faced) * 100;
                 }
-            });
-            
-            console.log(`Players with owners: ${playersWithOwners}, without owners: ${playersWithoutOwners}`);
-            
-            // Calculate total scores for each owner
-            Object.values(ownerStats).forEach(owner => {
-                owner.totalScore = owner.players.reduce((sum, player) => sum + player.score, 0);
-            });
-            
-            return ownerStats;
-        }
-        
-        function calculatePlayerScore(stats) {
-            // Base score
-            let score = 4;
-            
-            // Batting score
-            if (stats.runs > 0) {
-                score += stats.runs;
-                if (stats.runs >= 50) score += 8;
-                if (stats.runs >= 100) score += 8;
             }
             
-            // Bowling score
-            const wickets = stats.wickets;
-            const goodWickets = stats.wicket_bowled_or_lbw;
-            score += (goodWickets * 20) + ((wickets - goodWickets) * 16);
-            if (wickets >= 3) score += 15;
+            // Process bowler stats
+            if (bowlerId && playerStats[bowlerId]) {
+                playerStats[bowlerId].balls_bowled += 1;
+                
+                // Check for wicket
+                if (ball.wicket && ball.wicket.dismissed_id) {
+                    playerStats[bowlerId].wickets += 1;
+                }
+                
+                // Calculate economy
+                if (playerStats[bowlerId].balls_bowled >= 6) {
+                    const overs = Math.floor(playerStats[bowlerId].balls_bowled / 6) + 
+                        (playerStats[bowlerId].balls_bowled % 6) / 10;
+                    playerStats[bowlerId].economy = 
+                        playerStats[bowlerId].runs / overs;
+                }
+            }
             
-            // Fielding score
-            score += (stats.catches * 8) + (stats.run_outs * 8);
-            
-            return score;
+            // Process fielding stats (catches, run outs)
+            if (ball.wicket) {
+                const wicket = ball.wicket;
+                const fielder_id = String(wicket.fielder_id || "");
+                
+                if (fielder_id && playerStats[fielder_id]) {
+                    if (wicket.mode === "caught" || wicket.mode === "caught and bowled") {
+                        playerStats[fielder_id].catches += 1;
+                    } else if (wicket.mode === "run out") {
+                        playerStats[fielder_id].run_outs += 1;
+                    }
+                }
+            }
         }
         
-        function displayResults(ownerStats) {
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '';
+        // Calculate player scores using the provided score function
+        function calculatePlayerScores() {
+            for (const playerId in playerStats) {
+                const player = playerStats[playerId];
+                
+                // Score calculation based on the provided formula
+                let score = 0;
+                
+                // Batting score
+                score += player.runs;
+                
+                // Bowling score
+                score += player.wickets * 25;
+                
+                // Fielding score
+                score += player.catches * 10;
+                score += player.run_outs * 10;
+                
+                // Bonus for good strike rate (if enough balls faced)
+                if (player.balls_faced >= 10 && player.strike_rate > 150) {
+                    score += 10;
+                }
+                
+                // Bonus for good economy (if enough balls bowled)
+                if (player.balls_bowled >= 12 && player.economy < 7) {
+                    score += 10;
+                }
+                
+                // Store the calculated score
+                player.score = score;
+            }
             
-            // Create owner scores table
-            const ownerTable = document.createElement('table');
-            ownerTable.className = 'table table-striped';
-            ownerTable.innerHTML = `
-                <thead>
-                    <tr>
-                        <th>Owner</th>
-                        <th>Total Score</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${Object.entries(ownerStats)
-                        .sort((a, b) => b[1].totalScore - a[1].totalScore)
-                        .map(([owner, stats]) => `
-                            <tr>
-                                <td>${owner}</td>
-                                <td>${stats.totalScore.toFixed(1)}</td>
-                            </tr>
-                        `).join('')}
-                </tbody>
+            console.log("Calculated scores for all players");
+        }
+        
+        // Function to display player table
+        function displayPlayerTable() {
+            console.log("Displaying player table");
+            const container = document.getElementById('player-table-container');
+            
+            // Get all players and sort by score (descending)
+            const players = Object.values(playerStats).sort((a, b) => b.score - a.score);
+            
+            // Create table HTML
+            let tableHtml = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Player</th>
+                            <th>Owner</th>
+                            <th>Runs</th>
+                            <th>SR</th>
+                            <th>Wickets</th>
+                            <th>Economy</th>
+                            <th>Catches</th>
+                            <th>Run Outs</th>
+                            <th>Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
             `;
             
-            // Create player scores table
-            const playerTable = document.createElement('table');
-            playerTable.className = 'table table-striped mt-4';
-            playerTable.innerHTML = `
-                <thead>
+            // Add player rows
+            players.forEach((player, index) => {
+                tableHtml += `
                     <tr>
-                        <th>Player</th>
-                        <th>Owner</th>
-                        <th>Runs</th>
-                        <th>Wickets</th>
-                        <th>Catches</th>
-                        <th>Run Outs</th>
-                        <th>Score</th>
+                        <td>${index + 1}</td>
+                        <td>${player.player_name}</td>
+                        <td>${player.owner}</td>
+                        <td>${player.runs}</td>
+                        <td>${player.strike_rate.toFixed(2)}</td>
+                        <td>${player.wickets}</td>
+                        <td>${player.economy.toFixed(2)}</td>
+                        <td>${player.catches}</td>
+                        <td>${player.run_outs}</td>
+                        <td><strong>${player.score}</strong></td>
                     </tr>
-                </thead>
-                <tbody>
-                    ${Object.entries(ownerStats)
-                        .flatMap(([owner, stats]) => 
-                            stats.players.map(player => `
-                                <tr>
-                                    <td>${player.name}${player.isHighestScorer ? '<span class="star">★</span>' : ''}</td>
-                                    <td>${owner}</td>
-                                    <td>${player.runs}</td>
-                                    <td>${player.wickets}</td>
-                                    <td>${player.catches}</td>
-                                    <td>${player.run_outs}</td>
-                                    <td>${player.score.toFixed(1)}</td>
-                                </tr>
-                            `)
-                        ).join('')}
-                </tbody>
+                `;
+            });
+            
+            tableHtml += `
+                    </tbody>
+                </table>
+                <div class="stats-info">
+                    Matches processed: ${matchesProcessed} | Players: ${players.length}
+                </div>
             `;
             
-            resultsDiv.appendChild(ownerTable);
-            resultsDiv.appendChild(playerTable);
+            // Update the container
+            container.innerHTML = tableHtml;
         }
     </script>
 </body>
