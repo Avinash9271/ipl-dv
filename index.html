@@ -227,12 +227,11 @@
         
         async function fetchMatchDetails(apiKey, matchId) {
             try {
-                // Add timestamp to prevent caching
+                console.log(`Fetching match details for ID: ${matchId}`);
                 const response = await fetch(addTimestamp(`https://api.cricapi.com/v1/match_bbb?apikey=${apiKey}&id=${matchId}`), {
                     cache: 'no-store'
                 });
                 const data = await response.json();
-                console.log('Match API Response:', data); // Debug log
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -241,6 +240,7 @@
                     throw new Error(data.info || data.error || 'API returned unsuccessful status');
                 }
                 
+                console.log('Match data structure:', JSON.stringify(data.data, null, 2));
                 return data;
             } catch (error) {
                 console.error('Match API Error:', error);
@@ -249,13 +249,12 @@
         }
         
         function processMatchDetails(matchData, matchId, teamOwnerMapping, matchStats) {
-            console.log('Processing match details for ID:', matchId);
-            console.log('Team owner mapping:', teamOwnerMapping);
+            console.log('Raw match data:', JSON.stringify(matchData, null, 2));
             
             const data = matchData.data || matchData;
             let ballByBall = data.ballByBall || data.bbb || [];
             
-            console.log('Ball by ball data length:', ballByBall.length);
+            console.log('Ball by ball array:', JSON.stringify(ballByBall, null, 2));
             
             if (!ballByBall || !ballByBall.length) {
                 console.log('No ball by ball data found');
@@ -269,11 +268,11 @@
             
             // Process each ball
             ballByBall.forEach((inning, idx) => {
-                console.log(`Processing inning ${idx + 1}`);
+                console.log(`Processing inning ${idx + 1}:`, JSON.stringify(inning, null, 2));
                 if (inning.overs) {
                     // Process each over
                     inning.overs.forEach((over, overIdx) => {
-                        console.log(`Processing over ${overIdx + 1}`);
+                        console.log(`Processing over ${overIdx + 1}:`, JSON.stringify(over, null, 2));
                         // Process each ball
                         over.balls.forEach(ball => {
                             processBall(ball, matchId, matchStats[matchId]);
