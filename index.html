@@ -39,65 +39,23 @@
             background-color: #ddffdd;
             color: #006600;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-        th {
-            background-color: #1e3a8a;
-            color: white;
-        }
-        tr:nth-child(even) {
-            background-color: #f2f2f2;
-        }
-        tr:hover {
-            background-color: #e6f0ff;
-        }
-        .loading {
-            margin-top: 20px;
-            text-align: center;
-            color: #666;
-        }
-        .form-container {
-            margin-bottom: 20px;
-            padding: 15px;
+        .instructions {
             background-color: #f8f9fa;
+            padding: 20px;
             border-radius: 5px;
+            margin-top: 20px;
         }
-        .form-group {
-            margin-bottom: 15px;
+        .instructions code {
+            background-color: #eee;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
         }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
+        .instructions ul {
+            padding-left: 20px;
         }
-        input[type="text"] {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        button {
-            background-color: #1e3a8a;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #152a60;
-        }
-        .hidden {
-            display: none;
+        .instructions li {
+            margin-bottom: 10px;
         }
     </style>
 </head>
@@ -106,246 +64,59 @@
         <h1>Cricket Team Statistics</h1>
         
         <div id="status-message" class="status-message info">
-            Please enter your API key or check URL parameters.
+            This is a static page that provides instructions for running the cricket statistics script.
         </div>
         
-        <div id="api-form" class="form-container">
-            <div class="form-group">
-                <label for="api-key">Cricket API Key:</label>
-                <input type="text" id="api-key" placeholder="Enter your API key">
-            </div>
-            <button id="load-data-btn">Load Data</button>
-        </div>
-        
-        <div id="data-container" class="hidden">
-            <!-- Team Owner Scores Table -->
-            <h2>Team Owner Scores</h2>
-            <table id="team-scores-table">
-                <thead>
-                    <tr>
-                        <th>Owner Name</th>
-                        <th>Total Score</th>
-                        <th>Number of Players</th>
-                    </tr>
-                </thead>
-                <tbody id="team-scores-body">
-                    <!-- Team scores will be loaded here -->
-                </tbody>
-            </table>
+        <div class="instructions">
+            <h2>How to View Your Cricket Statistics</h2>
             
-            <!-- Player Scores Table -->
-            <h2>Player Scores</h2>
-            <table id="player-scores-table">
-                <thead>
-                    <tr>
-                        <th>Player Name</th>
-                        <th>Team</th>
-                        <th>Owner</th>
-                        <th>Runs</th>
-                        <th>Wickets</th>
-                        <th>Catches</th>
-                        <th>Run Outs</th>
-                        <th>Score</th>
-                        <th>Match ID</th>
-                    </tr>
-                </thead>
-                <tbody id="player-scores-body">
-                    <!-- Player scores will be loaded here -->
-                </tbody>
-            </table>
+            <p>Since this is a static page hosted on GitHub Pages, it cannot execute Python scripts directly. To view your cricket statistics, please follow these steps:</p>
+            
+            <h3>1. Local Setup</h3>
+            <ul>
+                <li>Clone the repository:
+                    <br>
+                    <code>git clone https://github.com/Avinash9271/ipl-dv.git</code>
+                    <br>
+                    <code>cd ipl-dv</code>
+                </li>
+                <li>Install required dependencies:
+                    <br>
+                    <code>pip install -r requirements.txt</code>
+                </li>
+            </ul>
+            
+            <h3>2. Run the Script</h3>
+            <ul>
+                <li>Option 1 - Run with API key as argument:
+                    <br>
+                    <code>python cricket_scorer.py YOUR_API_KEY</code>
+                </li>
+                <li>Option 2 - Set environment variable and run:
+                    <br>
+                    <code>export CRICAPI_KEY=YOUR_API_KEY</code>
+                    <br>
+                    <code>python cricket_scorer.py</code>
+                </li>
+            </ul>
+            
+            <h3>3. View Results</h3>
+            <p>The script will:</p>
+            <ul>
+                <li>Fetch live match data from CricAPI</li>
+                <li>Process ball-by-ball statistics</li>
+                <li>Calculate scores using the following system:
+                    <ul>
+                        <li>Base score: 4 points</li>
+                        <li>Batting: 1 point per run, bonus for 50s and 100s</li>
+                        <li>Bowling: 20 points for bowled/LBW/caught & bowled, 16 for other wickets</li>
+                        <li>Fielding: 8 points each for catches and run outs</li>
+                        <li>1.3x multiplier for highest scorer in each match</li>
+                    </ul>
+                </li>
+                <li>Display team owner and player statistics in a formatted table</li>
+            </ul>
         </div>
     </div>
-    
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const statusMessage = document.getElementById('status-message');
-            const apiForm = document.getElementById('api-form');
-            const apiKeyInput = document.getElementById('api-key');
-            const loadDataBtn = document.getElementById('load-data-btn');
-            const dataContainer = document.getElementById('data-container');
-            
-            // Parse URL parameters to get the API key
-            const urlParams = new URLSearchParams(window.location.search);
-            const apiKeyParam = urlParams.get('key');
-            
-            // If API key is in URL, use it automatically
-            if (apiKeyParam) {
-                apiKeyInput.value = apiKeyParam;
-                statusMessage.textContent = `API key detected in URL. Click "Load Data" to fetch statistics.`;
-                statusMessage.className = 'status-message info';
-            }
-            
-            // Handle button click
-            loadDataBtn.addEventListener('click', function() {
-                const apiKey = apiKeyInput.value.trim();
-                
-                if (!apiKey) {
-                    statusMessage.textContent = 'Error: Please enter your API key';
-                    statusMessage.className = 'status-message error';
-                    return;
-                }
-                
-                // Update status and hide form
-                statusMessage.textContent = 'Loading data, please wait...';
-                statusMessage.className = 'status-message info';
-                
-                // Call the backend to process data
-                fetchCricketData(apiKey);
-            });
-            
-            function fetchCricketData(apiKey) {
-                // Since we're running this statically on GitHub Pages, we can't execute the Python script directly
-                // So we'll show guidance for how users should run locally
-                if (window.location.protocol === 'https:' && window.location.hostname !== 'localhost') {
-                    // We're on GitHub Pages or another hosted site
-                    statusMessage.innerHTML = `
-                        <strong>This is a static page and cannot run the Python script directly.</strong><br><br>
-                        To run with your API key, please clone the repository and run locally:<br>
-                        <code>export CRICAPI_KEY=${apiKey} && python cricket_scorer.py</code><br><br>
-                        Or use the command: <code>python cricket_scorer.py ${apiKey}</code>
-                    `;
-                    statusMessage.className = 'status-message info';
-                    return;
-                }
-                
-                // If running locally, we'd typically make an AJAX request to a backend
-                // For demo purposes, we'll show mock data since we can't execute Python from browser
-                
-                // Simulate a delay
-                setTimeout(() => {
-                    // For demonstration, we'll create sample data
-                    // In a real implementation, this would come from the Python script
-                    const mockData = generateMockData();
-                    
-                    // Display the data
-                    displayTeamScores(mockData);
-                    displayPlayersByOwner(mockData);
-                    
-                    // Show the data container
-                    dataContainer.classList.remove('hidden');
-                    
-                    // Update status message
-                    statusMessage.textContent = `Data loaded successfully (API key: ${maskApiKey(apiKey)})`;
-                    statusMessage.className = 'status-message success';
-                    
-                    // Hide the form
-                    apiForm.classList.add('hidden');
-                }, 1500);
-            }
-            
-            function generateMockData() {
-                // This is just a placeholder - the real data would come from the Python script
-                return {
-                    "Vikhyat": {
-                        "total_score": 320.5,
-                        "total_players": 5,
-                        "players": [
-                            {
-                                "player_id": "95",
-                                "player_name": "Jasprit Bumrah",
-                                "team_id": "MI",
-                                "owner": "Vikhyat",
-                                "runs": 0,
-                                "wickets": 3,
-                                "wicket_bowled_or_lbw": 2, 
-                                "catches": 1,
-                                "run_outs": 0,
-                                "score": 87.5,
-                                "match_id": "match_123",
-                                "is_highest_scorer": true
-                            }
-                        ]
-                    },
-                    "Rohan": {
-                        "total_score": 250.2,
-                        "total_players": 4,
-                        "players": [
-                            {
-                                "player_id": "144",
-                                "player_name": "Glenn Maxwell",
-                                "team_id": "RCB",
-                                "owner": "Rohan",
-                                "runs": 65,
-                                "wickets": 1,
-                                "wicket_bowled_or_lbw": 0,
-                                "catches": 1,
-                                "run_outs": 0,
-                                "score": 97.8,
-                                "match_id": "match_123"
-                            }
-                        ]
-                    }
-                };
-            }
-            
-            function maskApiKey(key) {
-                if (key.length <= 4) return '****';
-                return '****' + key.slice(-4);
-            }
-            
-            function displayTeamScores(data) {
-                const tableBody = document.getElementById('team-scores-body');
-                tableBody.innerHTML = '';
-                
-                // Sort owners by total score
-                const sortedOwners = Object.entries(data)
-                    .sort((a, b) => b[1].total_score - a[1].total_score);
-                
-                // Add each owner to the table
-                sortedOwners.forEach(([ownerName, ownerData]) => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${ownerName}</td>
-                        <td>${ownerData.total_score.toFixed(2)}</td>
-                        <td>${ownerData.total_players}</td>
-                    `;
-                    tableBody.appendChild(row);
-                });
-            }
-            
-            function displayPlayersByOwner(data) {
-                const tableBody = document.getElementById('player-scores-body');
-                tableBody.innerHTML = '';
-                
-                // Collect all players from all owners
-                const allPlayers = [];
-                
-                Object.entries(data).forEach(([ownerName, ownerData]) => {
-                    const players = ownerData.players || [];
-                    
-                    players.forEach(player => {
-                        allPlayers.push(player);
-                    });
-                });
-                
-                // Sort players by their score in descending order
-                const sortedPlayers = allPlayers.sort((a, b) => b.score - a.score);
-                
-                // Add each player to the table
-                sortedPlayers.forEach(player => {
-                    const row = document.createElement('tr');
-                    let playerName = player.player_name || 'Unknown Player';
-                    
-                    // Add star to highest scoring player
-                    if (player.is_highest_scorer) {
-                        playerName += ' ⭐ (1.3x)';
-                    }
-                    
-                    row.innerHTML = `
-                        <td>${playerName}</td>
-                        <td>${player.team_id || 'Unknown Team'}</td>
-                        <td>${player.owner}</td>
-                        <td>${player.runs || 0}</td>
-                        <td>${player.wickets || 0}</td>
-                        <td>${player.catches || 0}</td>
-                        <td>${player.run_outs || 0}</td>
-                        <td>${player.score.toFixed(2)}</td>
-                        <td>${player.match_id || 'Unknown Match'}</td>
-                    `;
-                    tableBody.appendChild(row);
-                });
-            }
-        });
-    </script>
 </body>
 </html> 
