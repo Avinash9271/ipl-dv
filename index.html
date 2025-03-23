@@ -163,16 +163,27 @@
 
         function parseTeamOwnerMapping(csvText) {
             console.log('Parsing CSV text:', csvText); // Debug log
-            const lines = csvText.split('\n');
+            const lines = csvText.trim().split('\n');
             console.log('CSV lines:', lines); // Debug log
             const mapping = {};
             
             // Skip header row
             for (let i = 1; i < lines.length; i++) {
-                const values = lines[i].split(',').map(s => s.trim());
+                const line = lines[i].trim();
+                if (!line) continue;  // Skip empty lines
+                
+                // Split by comma but keep commas within quotes
+                const values = line.match(/(?:\"([^\"]*)\"|([^,]+))/g)
+                    .map(val => val.replace(/^"|"$/g, '').trim());  // Remove quotes and trim
+                
                 console.log('Line values:', values); // Debug log
-                if (values.length >= 8) {  // We expect 8 columns now
-                    const [_, __, ___, ____, player_id, team_id, player_name, owner] = values;
+                
+                if (values.length >= 8) {
+                    const player_id = values[4];
+                    const team_id = values[5];
+                    const player_name = values[6];
+                    const owner = values[7];
+                    
                     if (player_id && owner) {
                         mapping[player_id] = { player_name, team_id, owner };
                     }
