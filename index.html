@@ -256,7 +256,8 @@
                     dot_balls: 0,
                     good_ones: 0,
                     score: 0,
-                    matchScores: {} // Track scores per match
+                    matchScores: {}, // Track scores per match
+                    matchStats: {}   // Track stats per match
                 };
             }
             console.log("Initialized player stats for", Object.keys(playerStats).length, "players");
@@ -428,10 +429,37 @@
             // Initialize match score for this player if it doesn't exist
             matchPlayerScores[canonicalId] = matchPlayerScores[canonicalId] || 0;
             
+            // Initialize per-match stats tracking if it doesn't exist
+            if (!playerStats[canonicalId].matchStats) {
+                playerStats[canonicalId].matchStats = {};
+            }
+            
+            // Initialize this match's stats if they don't exist
+            if (!playerStats[canonicalId].matchStats[matchId]) {
+                playerStats[canonicalId].matchStats[matchId] = {
+                    runs: 0,
+                    balls_faced: 0,
+                    wickets: 0,
+                    balls_bowled: 0,
+                    catches: 0,
+                    run_outs: 0,
+                    economy: 0,
+                    high_score: 0,
+                    strike_rate: 0,
+                    runs_conceded: 0,
+                    dot_balls: 0,
+                    good_ones: 0
+                };
+            }
+            
+            // Get reference to this match's stats
+            const matchStats = playerStats[canonicalId].matchStats[matchId];
+            
             if (isBatsman) {
                 // Update batting stats
                 const runs = parseInt(ball.runs || 0);
                 playerStats[canonicalId].runs += runs;
+                matchStats.runs += runs;
                 
                 // Only count as ball faced if it's not a wide or no ball
                 const isWide = ball.isWide || ball.type === "wide";
@@ -439,14 +467,20 @@
                 
                 if (!isWide && !isNoBall) {
                     playerStats[canonicalId].balls_faced += 1;
+                    matchStats.balls_faced += 1;
                 }
                 
-                // Update high score
-                if (runs > playerStats[canonicalId].high_score) {
-                    playerStats[canonicalId].high_score = runs;
+                // Update high score for overall and match stats
+                if (matchStats.runs > playerStats[canonicalId].high_score) {
+                    playerStats[canonicalId].high_score = matchStats.runs;
                 }
                 
-                // Update strike rate
+                // Update strike rate for match stats
+                if (matchStats.balls_faced > 0) {
+                    matchStats.strike_rate = (matchStats.runs / matchStats.balls_faced) * 100;
+                }
+                
+                // Update strike rate for overall stats
                 if (playerStats[canonicalId].balls_faced > 0) {
                     playerStats[canonicalId].strike_rate = 
                         (playerStats[canonicalId].runs / playerStats[canonicalId].balls_faced) * 100;
@@ -457,12 +491,16 @@
             } else {
                 // Update bowling stats
                 playerStats[canonicalId].balls_bowled += 1;
+                matchStats.balls_bowled += 1;
+                
                 const runsConceded = parseInt(ball.runs || 0);
                 playerStats[canonicalId].runs_conceded += runsConceded;
+                matchStats.runs_conceded += runsConceded;
                 
                 // Check for dot ball
                 if (parseInt(ball.runs || 0) === 0) {
                     playerStats[canonicalId].dot_balls += 1;
+                    matchStats.dot_balls += 1;
                     matchPlayerScores[canonicalId] += 1; // 1 point for a dot ball
                 }
                 
@@ -471,17 +509,26 @@
                     const dismissalType = ball.dismissal.toLowerCase();
                     if (["bowled", "caught", "lbw", "stumped", "caught and bowled", "hit wicket"].includes(dismissalType)) {
                         playerStats[canonicalId].wickets += 1;
+                        matchStats.wickets += 1;
                         matchPlayerScores[canonicalId] += 20; // 20 points for a wicket
                         
                         // Check for good_one (bowled/lbw/caught and bowled)
                         if (["bowled", "lbw", "caught and bowled"].includes(dismissalType)) {
                             playerStats[canonicalId].good_ones += 1;
+                            matchStats.good_ones += 1;
                             matchPlayerScores[canonicalId] += 10; // 10 points for a good_one
                         }
                     }
                 }
                 
-                // Calculate economy
+                // Calculate economy for match
+                if (matchStats.balls_bowled >= 6) {
+                    const overs = Math.floor(matchStats.balls_bowled / 6) + 
+                        (matchStats.balls_bowled % 6) / 10;
+                    matchStats.economy = matchStats.runs_conceded / overs;
+                }
+                
+                // Calculate economy for overall stats
                 if (playerStats[canonicalId].balls_bowled >= 6) {
                     const overs = Math.floor(playerStats[canonicalId].balls_bowled / 6) + 
                         (playerStats[canonicalId].balls_bowled % 6) / 10;
@@ -580,7 +627,8 @@
                     dot_balls: 0,
                     good_ones: 0,
                     score: 0,
-                    matchScores: {} // Track scores per match
+                    matchScores: {}, // Track scores per match
+                    matchStats: {}   // Track stats per match
                 };
                 console.log(`Added new player: ${playerName} (${playerId})`);
             }
@@ -708,77 +756,74 @@
         
         // Calculate player scores using the provided score function
         function calculatePlayerScores() {
+            console.log("Calculating player scores on a per-match basis");
+            
             for (const playerId in playerStats) {
                 const player = playerStats[playerId];
                 
-                // Score calculation based on the provided formula
-                let score = 0;
+                // Reset the player's total score
+                player.score = 0;
                 
-                // Batting score
-                let batsman_score = 0;
-                if (player.balls_faced > 0) {
-                    const sr = player.runs / player.balls_faced;
-                    batsman_score = player.runs + (sr - 1.5) * Math.max(player.runs, player.balls_faced) + 
-                                   (player.runs >= 50 ? 8 : 0) + (player.runs >= 100 ? 8 : 0);
-                }
-                
-                // Bowling score
-                let bowlers_score = 0;
-                if (player.balls_bowled > 0) {
-                    bowlers_score = 3 * (1.5 * player.balls_bowled - player.runs_conceded) + 
-                                   player.wickets * 20 + player.good_ones * 10 + 
-                                   (player.wickets >= 3 ? 15 : 0) + player.dot_balls;
-                }
-                
-                // Fielding score
-                const fielding_score = (player.catches + player.run_outs) * 10;
-                
-                // Base score without multipliers
-                const baseScore = batsman_score + bowlers_score + fielding_score + 4;
-                
-                // Apply 1.3x multiplier ONLY to the match scores where this player was highest scorer
-                // First, calculate the sum of all match scores WITHOUT any multiplier
-                let totalMatchScores = 0;
-                let multipliedMatchScores = 0;
-                
-                // Track which matches got multiplier for display
+                // Track which matches received multipliers
                 const multipliedMatches = [];
                 
-                // Process each match score
-                for (const matchId in player.matchScores) {
-                    const matchScore = player.matchScores[matchId];
-                    
-                    // Check if this player was the highest scorer in this match
-                    if (matchHighestScorers[matchId] && matchHighestScorers[matchId].playerId === playerId) {
-                        // Apply 1.3x multiplier ONLY to this match's score
-                        multipliedMatchScores += matchScore * 1.3;
-                        multipliedMatches.push(matchId);
-                        console.log(`Applied 1.3x multiplier to ${player.player_name}'s score of ${matchScore} in match ${matchId}`);
-                    } else {
-                        // No multiplier for this match
-                        multipliedMatchScores += matchScore;
+                // Calculate score for each match separately, then sum up
+                if (player.matchStats) {
+                    for (const matchId in player.matchStats) {
+                        const matchStats = player.matchStats[matchId];
+                        
+                        // Calculate score for this match using the formula
+                        let matchScore = calculateMatchScore(matchStats);
+                        
+                        // Apply multiplier if this player was the highest scorer in this match
+                        if (matchHighestScorers[matchId] && matchHighestScorers[matchId].playerId === playerId) {
+                            matchScore = matchScore * 1.3;
+                            multipliedMatches.push(matchId);
+                            console.log(`Applied 1.3x multiplier to ${player.player_name}'s score of ${(matchScore/1.3).toFixed(2)} → ${matchScore.toFixed(2)} in match ${matchId}`);
+                        }
+                        
+                        // Add this match's score to the player's total
+                        player.score += matchScore;
+                        
+                        // Store the calculated match score
+                        player.matchScores[matchId] = matchScore;
                     }
-                    
-                    // Add to total without multiplier (for tracking)
-                    totalMatchScores += matchScore;
                 }
                 
-                // Final score is the correctly multiplied match scores
-                score = multipliedMatchScores;
+                // Round the final score
+                player.score = Math.round(player.score);
+                player.multipliedMatches = multipliedMatches;
                 
-                // Store the calculated score
-                player.score = Math.round(score);
-                player.multipliedMatches = multipliedMatches; // Store which matches got multiplier
-                
-                // Log detailed score breakdown for debugging
-                console.log(`${player.player_name} score: ${player.score} ` + 
-                    `(Batting: ${Math.round(batsman_score)}, ` +
-                    `Bowling: ${Math.round(bowlers_score)}, ` + 
-                    `Fielding: ${fielding_score}, ` +
-                    `Multiplier: ${multipliedMatches.length > 0 ? '1.3x on ' + multipliedMatches.length + ' matches' : 'None'})`);
+                // Log the final score
+                console.log(`${player.player_name} final score: ${player.score} (with multiplier on ${multipliedMatches.length} matches)`);
             }
             
-            console.log("Calculated scores for all players");
+            console.log("Finished calculating scores for all players");
+        }
+        
+        // Function to calculate a player's score for a single match
+        function calculateMatchScore(stats) {
+            // Batting score
+            let batsman_score = 0;
+            if (stats.balls_faced > 0) {
+                const sr = stats.runs / stats.balls_faced;
+                batsman_score = stats.runs + (sr - 1.5) * Math.max(stats.runs, stats.balls_faced) + 
+                              (stats.runs >= 50 ? 8 : 0) + (stats.runs >= 100 ? 8 : 0);
+            }
+            
+            // Bowling score
+            let bowlers_score = 0;
+            if (stats.balls_bowled > 0) {
+                bowlers_score = 3 * (1.5 * stats.balls_bowled - stats.runs_conceded) + 
+                              stats.wickets * 20 + stats.good_ones * 10 + 
+                              (stats.wickets >= 3 ? 15 : 0) + stats.dot_balls;
+            }
+            
+            // Fielding score (catches and run-outs)
+            const fielding_score = (stats.catches + stats.run_outs) * 10;
+            
+            // Final score for this match
+            return batsman_score + bowlers_score + fielding_score + 4;
         }
         
         // Function to display player table
