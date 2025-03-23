@@ -78,7 +78,8 @@
             }
         };
 
-        const IPL_2024_SERIES_ID = "47b54677-34de-4378-9019-154e82b9cc1a";
+        // IPL 2025 Series ID
+        const IPL_2025_SERIES_ID = "c5c5e8e3-c6d0-4dd3-8564-e2435e737e48";
         
         async function fetchData() {
             const apiKey = document.getElementById('apiKey').value;
@@ -93,9 +94,9 @@
             
             try {
                 // Fetch series matches first to validate API key
-                const matches = await fetchSeriesMatches(apiKey, IPL_2024_SERIES_ID);
+                const matches = await fetchSeriesMatches(apiKey, IPL_2025_SERIES_ID);
                 if (!matches || matches.length === 0) {
-                    throw new Error('No matches found for the series');
+                    throw new Error('No matches found for IPL 2025');
                 }
                 
                 // Fetch team owner mapping
@@ -182,7 +183,18 @@
                     throw new Error(data.info || data.error || 'API returned unsuccessful status');
                 }
                 
-                return data.data?.matchList || [];
+                // Filter for matches after March 2024 (IPL 2024)
+                const ipl2025Matches = (data.data?.matchList || []).filter(match => {
+                    const matchDate = new Date(match.date || match.dateTimeGMT);
+                    return matchDate >= new Date('2025-03-01');
+                });
+
+                if (ipl2025Matches.length === 0) {
+                    throw new Error('No IPL 2025 matches found');
+                }
+
+                console.log('Filtered IPL 2025 matches:', ipl2025Matches); // Debug log
+                return ipl2025Matches;
             } catch (error) {
                 console.error('Series API Error:', error);
                 throw new Error(`Failed to fetch series matches: ${error.message}`);
@@ -191,7 +203,8 @@
         
         async function fetchMatchDetails(apiKey, matchId) {
             try {
-                const response = await fetch(`https://api.cricapi.com/v1/match_info?apikey=${apiKey}&id=${matchId}`);
+                // Use match_bbb endpoint for ball-by-ball data
+                const response = await fetch(`https://api.cricapi.com/v1/match_bbb?apikey=${apiKey}&id=${matchId}`);
                 const data = await response.json();
                 console.log('Match API Response:', data); // Debug log
                 
