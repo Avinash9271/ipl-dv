@@ -236,9 +236,10 @@ class StatsProcessor:
                 bowling_stats['wickets'] += 1
                 match_bowler_stats['wickets'] += 1
                 
-                # Count as a "good one" for scoring
-                bowling_stats['good_ones'] += 1
-                match_bowler_stats['good_one'] += 1
+                # Count as a "good one" only for specific wicket types
+                if wicket_type in ['bowled', 'lbw', 'caught and bowled']:
+                    bowling_stats['good_ones'] += 1
+                    match_bowler_stats['good_one'] += 1
                 
                 if wicket_type not in bowling_stats['wicket_types']:
                     bowling_stats['wicket_types'][wicket_type] = 0

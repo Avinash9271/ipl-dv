@@ -1,18 +1,219 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Cricket Team Owner Statistics</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <link rel="stylesheet" href="assets/style.css">
+    <title>Cricket Team Statistics</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #1e3a8a;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #1e3a8a;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        tr:hover {
+            background-color: #e6f0ff;
+        }
+        .api-key-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #e6f0ff;
+            border-radius: 5px;
+        }
+        input, button {
+            padding: 8px;
+            margin-right: 10px;
+        }
+        button {
+            background-color: #1e3a8a;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        button:hover {
+            background-color: #152c6c;
+        }
+        .loading {
+            display: none;
+            margin-top: 10px;
+            color: #666;
+        }
+    </style>
 </head>
 <body>
-    <div id="react-entry-point">
-        <div class="loading">
-            <div class="loading-spinner"></div>
-            <div>Loading Cricket Team Owner Statistics...</div>
+    <div class="container">
+        <h1>Cricket Team Statistics</h1>
+        
+        <div class="api-key-section">
+            <h3>Enter API Key (Last 4 characters only)</h3>
+            <input type="text" id="api-key-input" placeholder="Last 4 digits of API key" maxlength="4">
+            <button id="load-data-btn">Load Data</button>
+            <div id="loading" class="loading">Loading data...</div>
+        </div>
+        
+        <div id="data-container">
+            <!-- Team Owner Scores Table -->
+            <h2>Team Owner Scores</h2>
+            <table id="team-scores-table">
+                <thead>
+                    <tr>
+                        <th>Owner Name</th>
+                        <th>Total Score</th>
+                        <th>Number of Players</th>
+                    </tr>
+                </thead>
+                <tbody id="team-scores-body">
+                    <!-- Team scores will be loaded here -->
+                </tbody>
+            </table>
+            
+            <!-- Player Scores Table -->
+            <h2>Player Scores</h2>
+            <table id="player-scores-table">
+                <thead>
+                    <tr>
+                        <th>Player Name</th>
+                        <th>Team</th>
+                        <th>Owner</th>
+                        <th>Total Runs</th>
+                        <th>Total Wickets</th>
+                    </tr>
+                </thead>
+                <tbody id="player-scores-body">
+                    <!-- Player scores will be loaded here -->
+                </tbody>
+            </table>
         </div>
     </div>
-    <script src="assets/app.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const apiKeyInput = document.getElementById('api-key-input');
+            const loadDataBtn = document.getElementById('load-data-btn');
+            const loadingIndicator = document.getElementById('loading');
+            
+            // Load data when the button is clicked
+            loadDataBtn.addEventListener('click', function() {
+                const apiKeyLast4 = apiKeyInput.value.trim();
+                if (apiKeyLast4.length !== 4) {
+                    alert('Please enter the last 4 characters of your API key');
+                    return;
+                }
+                
+                loadingIndicator.style.display = 'block';
+                
+                // In this static implementation, we'll just load the owner_stats.json file directly
+                fetch('owner_stats.json')
+                    .then(response => response.json())
+                    .then(data => {
+                        displayTeamScores(data);
+                        displayPlayersByOwner(data);
+                        loadingIndicator.style.display = 'none';
+                    })
+                    .catch(error => {
+                        console.error('Error loading data:', error);
+                        loadingIndicator.style.display = 'none';
+                        alert('Error loading data. Please try again.');
+                    });
+            });
+            
+            function displayTeamScores(data) {
+                const tableBody = document.getElementById('team-scores-body');
+                tableBody.innerHTML = '';
+                
+                // Sort owners by their total score (descending)
+                const sortedOwners = Object.entries(data)
+                    .map(([name, stats]) => ({
+                        name,
+                        total_runs: stats.total_runs || 0,
+                        total_wickets: stats.total_wickets || 0,
+                        total_players: stats.total_players || 0,
+                        // Calculate a total score based on runs and wickets
+                        total_score: (stats.total_runs || 0) + (stats.total_wickets || 0) * 20
+                    }))
+                    .sort((a, b) => b.total_score - a.total_score);
+                
+                // Add each owner to the table
+                sortedOwners.forEach(owner => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${owner.name}</td>
+                        <td>${owner.total_score.toFixed(2)}</td>
+                        <td>${owner.total_players}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            }
+            
+            function displayPlayersByOwner(data) {
+                const tableBody = document.getElementById('player-scores-body');
+                tableBody.innerHTML = '';
+                
+                // Collect all players from all owners
+                const allPlayers = [];
+                
+                Object.entries(data).forEach(([ownerName, ownerData]) => {
+                    const players = ownerData.players || [];
+                    
+                    players.forEach(player => {
+                        // Add owner information to each player
+                        allPlayers.push({
+                            ...player,
+                            owner: ownerName
+                        });
+                    });
+                });
+                
+                // Sort players by their calculated score (runs + wickets*20) in descending order
+                const sortedPlayers = allPlayers.sort((a, b) => {
+                    const scoreA = (a.runs || 0) + (a.wickets || 0) * 20;
+                    const scoreB = (b.runs || 0) + (b.wickets || 0) * 20;
+                    return scoreB - scoreA;
+                });
+                
+                // Add each player to the table
+                sortedPlayers.forEach(player => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${player.player_name || 'Unknown Player'}</td>
+                        <td>${player.team_id || 'Unknown Team'}</td>
+                        <td>${player.owner}</td>
+                        <td>${player.runs || 0}</td>
+                        <td>${player.wickets || 0}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            }
+        });
+    </script>
 </body>
 </html> 
