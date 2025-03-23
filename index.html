@@ -94,6 +94,7 @@
         let playerStats = {};
         let matchesProcessed = 0;
         let playerNameToId = {}; // Track players by name to prevent duplicates
+        let matchHighestScorers = {}; // Track highest scorer for each match
         
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -325,16 +326,41 @@
             }
             
             const balls = matchData.data.bbb;
-            console.log(`Processing ${balls.length} balls`);
+            const matchId = matchData.data.id;
+            console.log(`Processing ${balls.length} balls for match: ${matchId}`);
+            
+            // Reset player scores for this match
+            const matchPlayerScores = {};
             
             // Process each ball
             balls.forEach(ball => {
-                processBall(ball);
+                processBall(ball, matchId, matchPlayerScores);
             });
+            
+            // Find player with highest score for this match
+            let highestScore = -Infinity;
+            let highestScorerId = null;
+            
+            for (const playerId in matchPlayerScores) {
+                const score = matchPlayerScores[playerId];
+                if (score > highestScore) {
+                    highestScore = score;
+                    highestScorerId = playerId;
+                }
+            }
+            
+            if (highestScorerId) {
+                matchHighestScorers[matchId] = {
+                    playerId: highestScorerId,
+                    score: highestScore,
+                    playerName: playerStats[highestScorerId]?.player_name || "Unknown Player"
+                };
+                console.log(`Highest scorer for match ${matchId}: ${matchHighestScorers[matchId].playerName} with ${highestScore} points`);
+            }
         }
         
         // Function to process a single ball
-        function processBall(ball) {
+        function processBall(ball, matchId, matchPlayerScores) {
             if (!ball || !ball.batsman || !ball.bowler) return;
             
             const batterId = String(ball.batsman.id || "");
@@ -343,10 +369,10 @@
             const bowlerName = ball.bowler.name || "";
             
             // Handle batsman stats
-            updatePlayerStats(batterId, batterName, ball, true);
+            updatePlayerStats(batterId, batterName, ball, true, matchId, matchPlayerScores);
             
             // Handle bowler stats
-            updatePlayerStats(bowlerId, bowlerName, ball, false);
+            updatePlayerStats(bowlerId, bowlerName, ball, false, matchId, matchPlayerScores);
             
             // Process fielding stats (catches, run outs)
             if (ball.dismissal === "catch" && ball.catcher) {
@@ -357,6 +383,9 @@
                     const playerId = getOrCreatePlayer(catcherId, catcherName);
                     if (playerId && playerStats[playerId]) {
                         playerStats[playerId].catches += 1;
+                        
+                        // Update player's score for this match
+                        matchPlayerScores[playerId] = (matchPlayerScores[playerId] || 0) + 10; // 10 points for a catch
                     }
                 }
             } else if (ball.dismissal && ball.dismissal.toLowerCase() === "run out") {
@@ -369,6 +398,9 @@
                         const playerId = getOrCreatePlayer(fielderId, fielderName);
                         if (playerId && playerStats[playerId]) {
                             playerStats[playerId].run_outs += 1;
+                            
+                            // Update player's score for this match
+                            matchPlayerScores[playerId] = (matchPlayerScores[playerId] || 0) + 10; // 10 points for a run out
                         }
                     }
                 }
@@ -376,7 +408,7 @@
         }
         
         // Function to update player stats
-        function updatePlayerStats(playerId, playerName, ball, isBatsman) {
+        function updatePlayerStats(playerId, playerName, ball, isBatsman, matchId, matchPlayerScores) {
             if (!playerId || !playerName) return;
             
             // Get or create proper player ID to prevent duplicates
@@ -384,11 +416,21 @@
             
             if (!canonicalId || !playerStats[canonicalId]) return;
             
+            // Initialize match score for this player if it doesn't exist
+            matchPlayerScores[canonicalId] = matchPlayerScores[canonicalId] || 0;
+            
             if (isBatsman) {
                 // Update batting stats
                 const runs = parseInt(ball.runs || 0);
                 playerStats[canonicalId].runs += runs;
-                playerStats[canonicalId].balls_faced += 1;
+                
+                // Only count as ball faced if it's not a wide or no ball
+                const isWide = ball.isWide || ball.type === "wide";
+                const isNoBall = ball.isNoBall || ball.type === "noball";
+                
+                if (!isWide && !isNoBall) {
+                    playerStats[canonicalId].balls_faced += 1;
+                }
                 
                 // Update high score
                 if (runs > playerStats[canonicalId].high_score) {
@@ -400,14 +442,19 @@
                     playerStats[canonicalId].strike_rate = 
                         (playerStats[canonicalId].runs / playerStats[canonicalId].balls_faced) * 100;
                 }
+                
+                // Update player's score for this match
+                matchPlayerScores[canonicalId] += runs;
             } else {
                 // Update bowling stats
                 playerStats[canonicalId].balls_bowled += 1;
-                playerStats[canonicalId].runs_conceded += parseInt(ball.runs || 0);
+                const runsConceded = parseInt(ball.runs || 0);
+                playerStats[canonicalId].runs_conceded += runsConceded;
                 
                 // Check for dot ball
                 if (parseInt(ball.runs || 0) === 0) {
                     playerStats[canonicalId].dot_balls += 1;
+                    matchPlayerScores[canonicalId] += 1; // 1 point for a dot ball
                 }
                 
                 // Check for wicket
@@ -415,10 +462,12 @@
                     const dismissalType = ball.dismissal.toLowerCase();
                     if (["bowled", "caught", "lbw", "stumped", "caught and bowled", "hit wicket"].includes(dismissalType)) {
                         playerStats[canonicalId].wickets += 1;
+                        matchPlayerScores[canonicalId] += 20; // 20 points for a wicket
                         
                         // Check for good_one (bowled/lbw/caught and bowled)
                         if (["bowled", "lbw", "caught and bowled"].includes(dismissalType)) {
                             playerStats[canonicalId].good_ones += 1;
+                            matchPlayerScores[canonicalId] += 10; // 10 points for a good_one
                         }
                     }
                 }
@@ -430,6 +479,10 @@
                     playerStats[canonicalId].economy = 
                         playerStats[canonicalId].runs_conceded / overs;
                 }
+                
+                // Update bowling points for this match
+                // The formula here should roughly match what we'll calculate in the final score
+                matchPlayerScores[canonicalId] += 3 * (1.5 - runsConceded); // Economy bonus/penalty
             }
         }
         
@@ -620,11 +673,25 @@
                 // Final score
                 score = batsman_score + bowlers_score + fielding_score + 4;
                 
+                // Apply 1.3x multiplier for highest scorer in each match
+                // Check if this player was the highest scorer in any match
+                let appliedMultiplier = false;
+                for (const matchId in matchHighestScorers) {
+                    if (matchHighestScorers[matchId].playerId === playerId) {
+                        score = score * 1.3;
+                        appliedMultiplier = true;
+                        console.log(`Applied 1.3x multiplier to ${player.player_name} as highest scorer in match ${matchId}`);
+                        break; // Only apply multiplier once
+                    }
+                }
+                
                 // Store the calculated score
                 player.score = Math.round(score);
+                player.isHighestScorer = appliedMultiplier; // Flag for display
                 
                 // Log detailed score breakdown for debugging
-                console.log(`${player.player_name} score: ${player.score} (Batting: ${Math.round(batsman_score)}, Bowling: ${Math.round(bowlers_score)}, Fielding: ${fielding_score})`);
+                console.log(`${player.player_name} score: ${player.score} (Batting: ${Math.round(batsman_score)}, ` +
+                    `Bowling: ${Math.round(bowlers_score)}, Fielding: ${fielding_score}${appliedMultiplier ? ', x1.3 multiplier' : ''})`);
             }
             
             console.log("Calculated scores for all players");
@@ -661,10 +728,13 @@
             
             // Add player rows
             players.forEach((player, index) => {
+                // Add a highlight for players who got the multiplier
+                const rowClass = player.isHighestScorer ? 'style="background-color: #ffffd0;"' : '';
+                
                 tableHtml += `
-                    <tr>
+                    <tr ${rowClass}>
                         <td>${index + 1}</td>
-                        <td>${player.player_name}</td>
+                        <td>${player.player_name}${player.isHighestScorer ? ' 🌟' : ''}</td>
                         <td>${player.owner}</td>
                         <td>${player.runs}</td>
                         <td>${player.strike_rate.toFixed(2)}</td>
