@@ -68,28 +68,21 @@
         function addTimestamp(url) {
             return `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
         }
+
+        // Auto refresh every 5 minutes
+        setInterval(() => {
+            window.location.reload();
+        }, 300000);
         
-        // Check URL parameters for API key and fetch data on load
-        window.onload = function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const keyParam = urlParams.get('key');
-            if (keyParam && FULL_API_KEY.endsWith(keyParam)) {
-                fetchData(FULL_API_KEY);
-            } else {
-                document.getElementById('loadingMessage').innerHTML = `
-                    <div class="alert alert-danger">
-                        Error: Invalid or missing API key in URL
-                    </div>
-                `;
-            }
-        };
+        // Start fetching data immediately
+        document.getElementById('loadingMessage').style.display = 'block';
+        document.getElementById('results').style.display = 'none';
+        fetchData(FULL_API_KEY);
 
         // IPL 2025 Series ID
         const IPL_2025_SERIES_ID = "d5a498c8-7596-4b93-8ab0-e0efc3345312";
         
         async function fetchData(apiKey) {            
-            document.getElementById('loadingMessage').style.display = 'block';
-            document.getElementById('results').style.display = 'none';
             document.getElementById('loadingMessage').textContent = 'Loading data from CricAPI...';
             
             try {
