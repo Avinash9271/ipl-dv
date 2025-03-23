@@ -162,6 +162,7 @@
         }
 
         function parseTeamOwnerMapping(csvText) {
+            console.log('Starting CSV parsing...');
             const lines = csvText.trim().split('\n');
             const mapping = {};
             
@@ -170,8 +171,7 @@
                 const line = lines[i].trim();
                 if (!line) continue;
                 
-                const values = line.split(',').map(s => s.trim());
-                
+                const values = line.split(',');
                 if (values.length >= 8) {
                     const player_id = values[4].toString();
                     const team_id = values[5].toString();
@@ -188,17 +188,19 @@
                 }
             }
             
+            console.log('Parsed mapping:', mapping);
             return mapping;
         }
         
         async function fetchSeriesMatches(apiKey, seriesId) {
             try {
+                console.log('Fetching series matches...');
                 // Add timestamp to prevent caching
                 const response = await fetch(addTimestamp(`https://api.cricapi.com/v1/series_info?apikey=${apiKey}&id=${seriesId}`), {
                     cache: 'no-store'
                 });
                 const data = await response.json();
-                console.log('Series API Response:', data); // Debug log
+                console.log('Series API Response:', data);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -209,11 +211,13 @@
                 
                 // Get only started matches from this series
                 const matches = (data.data?.matchList || []).filter(match => match.matchStarted === true);
+                console.log('Found matches:', matches.length);
+                console.log('Match details:', matches);
+                
                 if (matches.length === 0) {
                     throw new Error('No started IPL 2025 matches found');
                 }
 
-                console.log('Started IPL 2025 matches:', matches); // Debug log
                 return matches;
             } catch (error) {
                 console.error('Series API Error:', error);
@@ -245,10 +249,16 @@
         }
         
         function processMatchDetails(matchData, matchId, teamOwnerMapping, matchStats) {
+            console.log('Processing match details for ID:', matchId);
+            console.log('Team owner mapping:', teamOwnerMapping);
+            
             const data = matchData.data || matchData;
             let ballByBall = data.ballByBall || data.bbb || [];
             
+            console.log('Ball by ball data length:', ballByBall.length);
+            
             if (!ballByBall || !ballByBall.length) {
+                console.log('No ball by ball data found');
                 return;
             }
             
@@ -258,10 +268,12 @@
             }
             
             // Process each ball
-            ballByBall.forEach(inning => {
+            ballByBall.forEach((inning, idx) => {
+                console.log(`Processing inning ${idx + 1}`);
                 if (inning.overs) {
                     // Process each over
-                    inning.overs.forEach(over => {
+                    inning.overs.forEach((over, overIdx) => {
+                        console.log(`Processing over ${overIdx + 1}`);
                         // Process each ball
                         over.balls.forEach(ball => {
                             processBall(ball, matchId, matchStats[matchId]);
@@ -272,15 +284,20 @@
                     processBall(inning, matchId, matchStats[matchId]);
                 }
             });
+            
+            console.log('Final match stats:', matchStats[matchId]);
         }
         
         function processBall(ball, matchId, matchStats) {
+            console.log('Processing ball:', ball);
             const batter = ball.batter || ball.batsman || {};
             const bowler = ball.bowler || {};
             
             // Get IDs and ensure they're strings
             const batterId = (batter.id || '').toString();
             const bowlerId = (bowler.id || '').toString();
+            
+            console.log('Batter ID:', batterId, 'Bowler ID:', bowlerId);
             
             if (!batterId || !bowlerId) return;
             
@@ -374,6 +391,8 @@
                     });
                 }
             }
+            
+            console.log('Updated match stats:', matchStats);
         }
         
         function calculateOwnerStats(matchStats, teamOwnerMapping) {
