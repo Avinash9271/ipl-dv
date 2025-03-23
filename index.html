@@ -50,11 +50,6 @@
     <div class="container">
         <h1 class="text-center">Cricket Stats</h1>
         
-        <div class="input-group mb-4">
-            <input type="text" id="apiKey" class="form-control" placeholder="Enter your CricAPI key">
-            <button class="btn btn-primary" onclick="fetchData()">Fetch Data</button>
-        </div>
-        
         <div id="loadingMessage" class="alert alert-info text-center">
             Loading data from CricAPI...
         </div>
@@ -66,28 +61,25 @@
         // Full API key with last 4 characters matching the URL parameter
         const FULL_API_KEY = "282bffef-9065-43b3-91f0-df54dec227fd";
         
-        // Check URL parameters for API key
+        // Check URL parameters for API key and fetch data on load
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
             const keyParam = urlParams.get('key');
             if (keyParam && FULL_API_KEY.endsWith(keyParam)) {
-                document.getElementById('apiKey').value = FULL_API_KEY;
-                fetchData(); // Auto-fetch with the full API key
-            } else if (keyParam) {
-                alert('Invalid API key suffix');
+                fetchData(FULL_API_KEY);
+            } else {
+                document.getElementById('loadingMessage').innerHTML = `
+                    <div class="alert alert-danger">
+                        Error: Invalid or missing API key in URL
+                    </div>
+                `;
             }
         };
 
         // IPL 2025 Series ID
         const IPL_2025_SERIES_ID = "d5a498c8-7596-4b93-8ab0-e0efc3345312";
         
-        async function fetchData() {
-            const apiKey = document.getElementById('apiKey').value;
-            if (!apiKey) {
-                alert('Please enter your API key');
-                return;
-            }
-            
+        async function fetchData(apiKey) {            
             document.getElementById('loadingMessage').style.display = 'block';
             document.getElementById('results').style.display = 'none';
             document.getElementById('loadingMessage').textContent = 'Loading data from CricAPI...';
