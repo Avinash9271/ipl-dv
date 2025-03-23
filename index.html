@@ -172,7 +172,8 @@
         
         async function fetchSeriesMatches(apiKey, seriesId) {
             try {
-                const response = await fetch(`https://api.cricapi.com/v1/series_info?apikey=${apiKey}&id=${seriesId}`);
+                // Use series_matches endpoint instead of series_info
+                const response = await fetch(`https://api.cricapi.com/v1/series_matches?apikey=${apiKey}&id=${seriesId}`);
                 const data = await response.json();
                 console.log('Series API Response:', data); // Debug log
                 
@@ -183,18 +184,14 @@
                     throw new Error(data.info || data.error || 'API returned unsuccessful status');
                 }
                 
-                // Filter for matches after March 2024 (IPL 2024)
-                const ipl2025Matches = (data.data?.matchList || []).filter(match => {
-                    const matchDate = new Date(match.date || match.dateTimeGMT);
-                    return matchDate >= new Date('2025-03-01');
-                });
-
-                if (ipl2025Matches.length === 0) {
+                // Get only matches from this series
+                const matches = data.data || [];
+                if (matches.length === 0) {
                     throw new Error('No IPL 2025 matches found');
                 }
 
-                console.log('Filtered IPL 2025 matches:', ipl2025Matches); // Debug log
-                return ipl2025Matches;
+                console.log('IPL 2025 matches:', matches); // Debug log
+                return matches;
             } catch (error) {
                 console.error('Series API Error:', error);
                 throw new Error(`Failed to fetch series matches: ${error.message}`);
