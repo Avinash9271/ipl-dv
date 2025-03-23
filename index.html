@@ -94,9 +94,12 @@
                         <th>Player Name</th>
                         <th>Team</th>
                         <th>Owner</th>
-                        <th>Total Runs</th>
-                        <th>Total Wickets</th>
+                        <th>Runs</th>
+                        <th>Wickets</th>
+                        <th>Catches</th>
+                        <th>Run Outs</th>
                         <th>Score</th>
+                        <th>Match ID</th>
                     </tr>
                 </thead>
                 <tbody id="player-scores-body">
@@ -175,56 +178,101 @@
                     players.forEach(player => {
                         const runs = player.runs || 0;
                         const wickets = player.wickets || 0;
+                        const catches = player.catches || 0;
+                        const run_outs = player.run_outs || 0;
+                        const wicket_bowled_or_lbw = player.wicket_bowled_or_lbw || 0;
                         
                         // Calculate batsman score component
                         let batsmanScore = 0;
                         if (runs > 0) {
-                            // Assume average strike rate of 1.5 for simplicity
+                            // Runs + bonus for milestones
                             batsmanScore = runs + (runs >= 50 ? 8 : 0) + (runs >= 100 ? 8 : 0);
                         }
                         
                         // Calculate bowlers score component
-                        // Assume all wickets are "good ones" (lbw, bowled, caught and bowled)
-                        let bowlersScore = wickets * 20 + (wickets >= 3 ? 15 : 0);
+                        // Only count "good ones" (lbw, bowled, caught and bowled)
+                        let bowlersScore = (wicket_bowled_or_lbw * 20) + ((wickets - wicket_bowled_or_lbw) * 16);
+                        bowlersScore += (wickets >= 3 ? 15 : 0);
                         
-                        // We don't have fielding data, so assume 0
-                        const fieldingScore = 0;
+                        // Calculate fielding score component
+                        const fieldingScore = (catches * 8) + (run_outs * 8);
                         
                         // Total player score with base 4 points
                         const totalScore = batsmanScore + bowlersScore + fieldingScore + 4;
                         
-                        playerScores[player.player_id] = {
-                            ...player,
-                            owner: ownerName,
-                            calculatedScore: totalScore
-                        };
+                        // Store player with match info for highest scorer calculation later
+                        const matchId = player.match_id || 'unknown_match'; // If match_id is available
                         
-                        // Add to owner total
-                        ownerTotals[ownerName].totalScore += totalScore;
+                        if (!playerScores[matchId]) {
+                            playerScores[matchId] = [];
+                        }
+                        
+                        playerScores[matchId].push({
+                            player_id: player.player_id,
+                            owner: ownerName,
+                            originalScore: totalScore,
+                            calculatedScore: totalScore, // Will be updated with multiplier if highest
+                            matchId
+                        });
+                        
+                        // Store player scores
+                        if (!player.calculatedScores) {
+                            player.calculatedScores = {
+                                batsmanScore,
+                                bowlersScore,
+                                fieldingScore,
+                                baseScore: 4,
+                                totalScore
+                            };
+                        }
                     });
                 });
                 
-                // Apply 1.3x multiplier to the highest scoring player in each match
-                // Since we don't have match-specific data, we'll just take the highest scoring player overall
-                let highestScore = 0;
-                let highestScoringPlayerId = null;
-                
-                Object.entries(playerScores).forEach(([playerId, player]) => {
-                    if (player.calculatedScore > highestScore) {
-                        highestScore = player.calculatedScore;
-                        highestScoringPlayerId = playerId;
+                // Apply 1.3x multiplier to the highest scoring player in EACH match
+                Object.keys(playerScores).forEach(matchId => {
+                    const matchPlayers = playerScores[matchId];
+                    
+                    // Find highest scoring player in this match
+                    let highestScore = 0;
+                    let highestScoringPlayerIndex = -1;
+                    
+                    matchPlayers.forEach((player, index) => {
+                        if (player.originalScore > highestScore) {
+                            highestScore = player.originalScore;
+                            highestScoringPlayerIndex = index;
+                        }
+                    });
+                    
+                    // Apply the multiplier to highest scorer in this match
+                    if (highestScoringPlayerIndex >= 0) {
+                        const player = matchPlayers[highestScoringPlayerIndex];
+                        player.isHighestScorer = true;
+                        player.calculatedScore = player.originalScore * 1.3;
+                        
+                        // Mark this player in the original data
+                        Object.entries(data).forEach(([ownerName, ownerData]) => {
+                            const players = ownerData.players || [];
+                            players.forEach(p => {
+                                if (p.player_id === player.player_id && p.match_id === matchId) {
+                                    p.isHighestScorer = true;
+                                    p.originalScore = player.originalScore;
+                                    p.calculatedScore = player.calculatedScore;
+                                }
+                            });
+                        });
                     }
                 });
                 
-                // Apply the multiplier
-                if (highestScoringPlayerId) {
-                    const player = playerScores[highestScoringPlayerId];
-                    const originalScore = player.calculatedScore;
-                    player.calculatedScore = originalScore * 1.3;
+                // Now calculate owner totals based on updated scores
+                Object.entries(data).forEach(([ownerName, ownerData]) => {
+                    const players = ownerData.players || [];
                     
-                    // Update owner total
-                    ownerTotals[player.owner].totalScore += (originalScore * 0.3);
-                }
+                    players.forEach(player => {
+                        // Use the calculated score (with 1.3x multiplier if applicable)
+                        const score = player.calculatedScore || player.calculatedScores?.totalScore || 0;
+                        ownerTotals[ownerName].totalScore += score;
+                    });
+                });
                 
                 // Sort owners by total score and display
                 const sortedOwners = Object.values(ownerTotals)
@@ -255,26 +303,39 @@
                     players.forEach(player => {
                         const runs = player.runs || 0;
                         const wickets = player.wickets || 0;
+                        const catches = player.catches || 0;
+                        const run_outs = player.run_outs || 0;
+                        const wicket_bowled_or_lbw = player.wicket_bowled_or_lbw || 0;
                         
-                        // Calculate batsman score component
-                        let batsmanScore = 0;
-                        if (runs > 0) {
-                            // Assume average strike rate of 1.5 for simplicity
-                            batsmanScore = runs + (runs >= 50 ? 8 : 0) + (runs >= 100 ? 8 : 0);
+                        // If player already has calculatedScores from the first pass, use those
+                        // Otherwise calculate them again
+                        let totalScore;
+                        let batsmanScore, bowlersScore, fieldingScore;
+                        
+                        if (player.calculatedScores) {
+                            ({ batsmanScore, bowlersScore, fieldingScore, totalScore } = player.calculatedScores);
+                        } else {
+                            // Calculate batsman score component
+                            batsmanScore = 0;
+                            if (runs > 0) {
+                                batsmanScore = runs + (runs >= 50 ? 8 : 0) + (runs >= 100 ? 8 : 0);
+                            }
+                            
+                            // Calculate bowlers score component - only count "good ones" for the 20 point bonus
+                            bowlersScore = (wicket_bowled_or_lbw * 20) + ((wickets - wicket_bowled_or_lbw) * 16);
+                            bowlersScore += (wickets >= 3 ? 15 : 0);
+                            
+                            // Calculate fielding score component
+                            fieldingScore = (catches * 8) + (run_outs * 8);
+                            
+                            // Total player score with base 4 points
+                            totalScore = batsmanScore + bowlersScore + fieldingScore + 4;
                         }
                         
-                        // Calculate bowlers score component
-                        // Assume all wickets are "good ones" (lbw, bowled, caught and bowled)
-                        let bowlersScore = wickets * 20 + (wickets >= 3 ? 15 : 0);
-                        
-                        // We don't have fielding data, so assume 0
-                        const fieldingScore = 0;
-                        
-                        // Total player score with base 4 points
-                        let totalScore = batsmanScore + bowlersScore + fieldingScore + 4;
-                        
-                        // Check if this is the highest scoring player (for 1.3x multiplier)
-                        // For simplicity, we'll apply this when displaying
+                        // Use the calculated score with 1.3x multiplier if player is highest scorer
+                        if (player.isHighestScorer) {
+                            totalScore = player.calculatedScore;
+                        }
                         
                         allPlayers.push({
                             ...player,
@@ -282,28 +343,13 @@
                             batsmanScore,
                             bowlersScore,
                             fieldingScore,
-                            totalScore
+                            totalScore,
+                            isHighestScorer: !!player.isHighestScorer,
+                            originalScore: player.originalScore,
+                            match_id: player.match_id || 'unknown_match'
                         });
                     });
                 });
-                
-                // Find highest scoring player for 1.3x multiplier
-                let highestScore = 0;
-                let highestScoringPlayerIndex = -1;
-                
-                allPlayers.forEach((player, index) => {
-                    if (player.totalScore > highestScore) {
-                        highestScore = player.totalScore;
-                        highestScoringPlayerIndex = index;
-                    }
-                });
-                
-                // Apply the multiplier
-                if (highestScoringPlayerIndex >= 0) {
-                    allPlayers[highestScoringPlayerIndex].isHighestScorer = true;
-                    allPlayers[highestScoringPlayerIndex].originalScore = allPlayers[highestScoringPlayerIndex].totalScore;
-                    allPlayers[highestScoringPlayerIndex].totalScore *= 1.3;
-                }
                 
                 // Sort players by their calculated score in descending order
                 const sortedPlayers = allPlayers.sort((a, b) => b.totalScore - a.totalScore);
@@ -318,13 +364,19 @@
                         playerName += ' ⭐ (1.3x)';
                     }
                     
+                    const matchInfo = player.match_id !== 'unknown_match' ? 
+                        `(Match: ${player.match_id})` : '';
+                    
                     row.innerHTML = `
                         <td>${playerName}</td>
                         <td>${player.team_id || 'Unknown Team'}</td>
                         <td>${player.owner}</td>
                         <td>${player.runs || 0}</td>
                         <td>${player.wickets || 0}</td>
+                        <td>${player.catches || 0}</td>
+                        <td>${player.run_outs || 0}</td>
                         <td>${player.totalScore.toFixed(2)}</td>
+                        <td>${player.match_id || 'Unknown Match'}</td>
                     `;
                     tableBody.appendChild(row);
                 });
