@@ -258,95 +258,79 @@ def fetch_series_info(n_clicks, api_key, series_id):
     prevent_initial_call=True
 )
 def refresh_matches(n_clicks, api_key, series_data):
-    if not n_clicks or not api_key or not series_data:
+    if not n_clicks or not series_data:
         return "", None, None
     
     client = get_api_client(api_key)
+    processed_matches = get_processed_matches()
     
     try:
-        # Get all matches for the series
-        series_id = series_data.get("id")
-        matches = client.get_all_matches(series_id)
-        
+        matches = client.get_matches()
         if not matches:
-            return dbc.Alert("No matches found for this series", color="warning"), None, None
+            return dbc.Alert("No matches found", color="warning"), None, None
         
-        # Get processed matches
-        processed_matches = get_processed_matches()
-        
-        # Prepare data for the table
+        # Create DataFrame for display
         matches_data = []
         for match in matches:
-            match_id = match.get("id")
-            match_status = match.get("status")
-            match_name = match.get("name", "Unknown")
-            match_date = match.get("date", "Unknown")
-            
-            # Check if match is processed
-            is_processed = match_id in processed_matches
-            processed_at = processed_matches.get(match_id, {}).get("processed_at", "N/A")
+            match_id = match["id"]
+            processed_info = processed_matches.get(match_id, {})
             
             matches_data.append({
                 "id": match_id,
-                "name": match_name,
-                "date": match_date,
-                "status": match_status,
-                "processed": "Yes" if is_processed else "No",
-                "processed_at": processed_at if is_processed else "N/A"
+                "name": match.get("name", "Unknown"),
+                "status": match.get("status", "Unknown"),
+                "date": match.get("date", "Unknown"),
+                "processed": "Yes" if match_id in processed_matches else "No",
+                "processed_at": processed_info.get("processed_at", "Never")
             })
         
-        # Create the matches table
-        matches_table = dash_table.DataTable(
+        df = pd.DataFrame(matches_data)
+        
+        # Create table
+        table = dash_table.DataTable(
             id="matches-table",
             columns=[
-                {"name": "ID", "id": "id"},
-                {"name": "Name", "id": "name"},
-                {"name": "Date", "id": "date"},
+                {"name": "Match", "id": "name"},
                 {"name": "Status", "id": "status"},
+                {"name": "Date", "id": "date"},
                 {"name": "Processed", "id": "processed"},
-                {"name": "Processed At", "id": "processed_at"}
+                {"name": "Last Processed", "id": "processed_at"}
             ],
-            data=matches_data,
+            data=df.to_dict("records"),
             style_table={"overflowX": "auto"},
-            style_cell={"textAlign": "left"},
+            style_cell={
+                "textAlign": "left",
+                "padding": "10px"
+            },
             style_header={
                 "backgroundColor": "rgb(230, 230, 230)",
                 "fontWeight": "bold"
             },
-            style_data_conditional=[
-                {
-                    "if": {"filter_query": "{processed} = 'Yes'"},
-                    "backgroundColor": "rgba(0, 255, 0, 0.1)"
-                }
-            ],
             row_selectable="multi",
             selected_rows=[],
             page_size=10
         )
         
-        # Add a button to process selected matches
-        matches_container = html.Div([
-            matches_table,
+        # Add process buttons
+        buttons = html.Div([
             dbc.Button(
-                "Process Selected Matches", 
-                id="process-matches-btn", 
-                color="primary", 
-                className="mt-3"
+                "Process Selected",
+                id="process-matches-btn",
+                color="primary",
+                className="me-2"
             ),
             dbc.Button(
-                "Reprocess All Completed Matches", 
-                id="reprocess-all-btn", 
-                color="warning", 
-                className="mt-3 ml-2"
-            ),
-            html.Div(id="processing-status", className="mt-3")
-        ])
+                "Reprocess All",
+                id="reprocess-all-btn",
+                color="warning"
+            )
+        ], className="mt-3")
         
-        return matches_container, matches_data, processed_matches
+        return [table, buttons], matches_data, processed_matches
     except Exception as e:
         return dbc.Alert(f"Error: {str(e)}", color="danger"), None, None
 
-# Callback for processing selected matches
+# Callback for processing matches
 @app.callback(
     [
         Output("status-modal", "is_open"),
@@ -372,118 +356,68 @@ def refresh_matches(n_clicks, api_key, series_data):
 def process_matches(process_clicks, reprocess_clicks, close_clicks, n_intervals, 
                    selected_rows, matches_data, api_key, is_open, processing_state):
     ctx = dash.callback_context
+    if not ctx.triggered:
+        return False, "", True, ""
+    
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
     
-    # Closing the modal
     if trigger_id == "close-modal":
         return False, "", True, ""
     
-    # Interval tick for updating processing status
     if trigger_id == "interval-component":
-        if processing_state:
-            current_state = json.loads(processing_state)
-            if current_state["status"] == "completed":
-                return False, "", True, ""
-            
-            log_file = current_state.get("log_file")
-            logs = []
-            
-            if log_file and os.path.exists(log_file):
-                with open(log_file, "r") as f:
-                    logs = f.readlines()[-20:]  # Show last 20 lines
-            
-            return is_open, html.Pre("\n".join(logs)), False, processing_state
+        if not processing_state:
+            return False, "", True, ""
+        return True, processing_state, False, processing_state
+    
+    if not matches_data:
         return False, "", True, ""
     
-    # Initial processing request
-    if not matches_data:
-        return is_open, "No matches data available", True, ""
+    # Get matches to process
+    matches_to_process = []
+    if trigger_id == "process-matches-btn":
+        if not selected_rows:
+            return False, "Please select matches to process", True, ""
+        matches_to_process = [matches_data[i] for i in selected_rows]
+    elif trigger_id == "reprocess-all-btn":
+        matches_to_process = matches_data
     
-    # Handle reprocess all
-    if trigger_id == "reprocess-all-btn" and reprocess_clicks:
-        selected_matches = [
-            match for match in matches_data 
-            if match["status"] == "completed"
-        ]
-    # Handle process selected
-    elif trigger_id == "process-matches-btn" and process_clicks and selected_rows:
-        selected_matches = [matches_data[idx] for idx in selected_rows]
-    else:
-        return is_open, "", True, ""
+    if not matches_to_process:
+        return False, "No matches to process", True, ""
     
-    if not selected_matches:
-        return True, "No matches selected for processing", True, ""
-    
-    # Set up processing
-    log_file = f"processing_{int(time.time())}.log"
-    
-    # Prepare initial state
-    process_state = {
-        "status": "processing",
-        "matches": [match["id"] for match in selected_matches],
-        "log_file": log_file,
-        "current": 0,
-        "total": len(selected_matches)
-    }
-    
-    with open(log_file, "w") as f:
-        f.write(f"Starting processing of {len(selected_matches)} matches\n")
-    
-    # Start processing in a separate thread or process
-    import threading
+    # Initialize processing
+    client = get_api_client(api_key)
+    processor = StatsProcessor()
     
     def process_matches_thread():
-        client = get_api_client(api_key)
-        processor = StatsProcessor(client)
-        
-        with open(log_file, "a") as f:
-            f.write(f"Initialized API client and StatsProcessor\n")
-            
-            for i, match in enumerate(selected_matches):
+        nonlocal processing_state
+        try:
+            for i, match in enumerate(matches_to_process, 1):
                 match_id = match["id"]
-                match_name = match["name"]
+                processing_state = f"Processing match {i}/{len(matches_to_process)}: {match['name']}"
                 
-                f.write(f"\nProcessing match {i+1}/{len(selected_matches)}: {match_name} ({match_id})\n")
+                # Get match details
+                match_details = client.get_match_details(match_id)
+                if not match_details:
+                    continue
                 
-                try:
-                    # Get match details
-                    match_details = client.get_match_details(match_id)
-                    
-                    if match_details:
-                        # Process ball-by-ball data
-                        if processor._process_match_data(match_id, match_details):
-                            f.write(f"Successfully processed ball-by-ball data for match {match_id}\n")
-                            save_processed_match(match_id, match)
-                        else:
-                            f.write(f"No ball-by-ball data available for match {match_id}\n")
-                    else:
-                        f.write(f"Failed to fetch details for match {match_id}\n")
-                except Exception as e:
-                    f.write(f"Error processing match {match_id}: {str(e)}\n")
+                # Process match
+                processor.process_match(match_details)
+                
+                # Save as processed
+                save_processed_match(match_id, match)
             
-            # Save the results
-            if processor.player_stats:
-                processor.save_to_csv()
-                processor.save_to_json()
-                f.write("\nPlayer statistics saved to CSV and JSON files\n")
-            else:
-                f.write("\nNo player statistics were generated\n")
-            
-            f.write("\nProcessing completed\n")
-            
-            # Update process state
-            process_state["status"] = "completed"
-            with open(log_file, "a") as f:
-                f.write("Processing thread finished\n")
+            processing_state = "Processing completed successfully!"
+        except Exception as e:
+            processing_state = f"Error during processing: {str(e)}"
     
     # Start processing thread
+    import threading
     thread = threading.Thread(target=process_matches_thread)
-    thread.daemon = True
     thread.start()
     
-    return True, f"Started processing {len(selected_matches)} matches...", False, json.dumps(process_state)
+    return True, "Starting processing...", False, "Starting processing..."
 
-# Callback to update the processing status
+# Callback for updating processing status
 @app.callback(
     Output("processing-status", "children"),
     [Input("process-matches-btn", "n_clicks"),
@@ -491,16 +425,7 @@ def process_matches(process_clicks, reprocess_clicks, close_clicks, n_intervals,
     prevent_initial_call=True
 )
 def update_processing_status(process_clicks, reprocess_clicks):
-    ctx = dash.callback_context
-    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    
-    if trigger_id == "process-matches-btn" and process_clicks:
-        return dbc.Alert("Processing selected matches. See modal for details.", color="info")
-    elif trigger_id == "reprocess-all-btn" and reprocess_clicks:
-        return dbc.Alert("Reprocessing all completed matches. See modal for details.", color="info")
-    
-    return ""
+    return "Processing..."
 
-# Run the app
 if __name__ == "__main__":
-    app.run_server(debug=True) 
+    app.run(debug=True) 
