@@ -325,21 +325,46 @@
                 if (!line) continue; // Skip empty lines
                 
                 const values = line.split(',');
-                if (values.length >= 8) {
+                if (values.length >= 9) { // Ensure we have enough columns including the extra multiplier
                     // Extract values from CSV columns
                     const player_id = String(values[4]).trim();
                     const team_id = String(values[5]).trim();
                     const player_name = values[6].trim();
                     const owner = values[7].trim();
                     
+                    // Parse extra_mult from column 9 (index 8) if available
+                    let extra_mult = 1.0; // Default value
+                    if (values.length > 8 && values[8] && !isNaN(parseFloat(values[8]))) {
+                        extra_mult = parseFloat(values[8]);
+                        console.log(`Found extra multiplier ${extra_mult} for ${player_name}`);
+                    }
+                    
                     // Store in mapping
                     mapping[player_id] = {
                         team_id: team_id,
                         player_name: player_name,
-                        owner: owner
+                        owner: owner,
+                        extra_mult: extra_mult
                     };
                     
-                    console.log(`Added player: ${player_id} - ${player_name} (${owner})`);
+                    console.log(`Added player: ${player_id} - ${player_name} (${owner}), multiplier: ${extra_mult}`);
+                } else {
+                    // Handle rows with fewer columns (e.g., no multiplier)
+                    if (values.length >= 8) {
+                        const player_id = String(values[4]).trim();
+                        const team_id = String(values[5]).trim();
+                        const player_name = values[6].trim();
+                        const owner = values[7].trim();
+                        
+                        mapping[player_id] = {
+                            team_id: team_id,
+                            player_name: player_name,
+                            owner: owner,
+                            extra_mult: 1.0 // Default multiplier
+                        };
+                        
+                        console.log(`Added player without multiplier: ${player_id} - ${player_name} (${owner})`);
+                    }
                 }
             }
             
@@ -356,6 +381,7 @@
                     player_name: playerInfo.player_name,
                     team_id: playerInfo.team_id,
                     owner: playerInfo.owner,
+                    extra_mult: playerInfo.extra_mult || 1.0, // Get multiplier from team mapping
                     runs: 0,
                     balls_faced: 0,
                     wickets: 0,
@@ -375,7 +401,6 @@
                     dot_balls: 0,
                     good_ones: 0,
                     score: 0,
-                    extra_mult: 1.0, // Default extra multiplier
                     matchScores: {}, // Track scores per match
                     matchStats: {},  // Track stats per match
                     multiplier_count: 0 // Track how many times player got 1.3x multiplier
@@ -980,6 +1005,7 @@
                     player_name: playerName,
                     team_id: ownerInfo.team_id || "",
                     owner: ownerInfo.owner || "Unknown",
+                    extra_mult: ownerInfo.extra_mult || 1.0, // Get multiplier from owner info if available
                     runs: 0,
                     balls_faced: 0,
                     wickets: 0,
@@ -998,7 +1024,6 @@
                     dot_balls: 0,
                     good_ones: 0,
                     score: 0,
-                    extra_mult: 1.0, // Default extra multiplier
                     matchScores: {}, // Track scores per match
                     matchStats: {},   // Track stats per match
                     multiplier_count: 0 // Track how many times player got 1.3x multiplier
@@ -1102,18 +1127,22 @@
         
         // Helper function to find owner info by player name
         function findOwnerByName(playerName) {
-            if (!playerName) return { owner: "Unknown", team_id: "" };
+            if (!playerName) return { owner: "Unknown", team_id: "", extra_mult: 1.0 };
             
             // Look for exact name matches first
             for (const [playerId, info] of Object.entries(teamOwnerMapping)) {
                 if (info.player_name.toLowerCase() === playerName.toLowerCase()) {
                     console.log(`Found exact owner match for: ${playerName} -> ${info.owner}`);
-                    return { owner: info.owner, team_id: info.team_id };
+                    return { 
+                        owner: info.owner, 
+                        team_id: info.team_id,
+                        extra_mult: info.extra_mult || 1.0
+                    };
                 }
             }
             
             // No special cases - just return Unknown if no match found
-            return { owner: "Unknown", team_id: "" };
+            return { owner: "Unknown", team_id: "", extra_mult: 1.0 };
         }
         
         // Calculate player scores using the provided score function
@@ -1571,30 +1600,9 @@
 
         // New function to set extra multipliers for players
         function setExtraMultipliers() {
-            console.log("Setting extra multipliers for players");
-            
-            // Example: Set multipliers based on owners
-            for (const playerId in playerStats) {
-                const player = playerStats[playerId];
-                
-                // Set different multipliers for different owners (for testing purposes)
-                if (player.owner === "Chowkidaar") {
-                    player.extra_mult = 1.2; // 20% bonus
-                    console.log(`Set 1.2x extra multiplier for ${player.player_name} (Chowkidaar)`);
-                } else if (player.owner === "Pura") {
-                    player.extra_mult = 1.1; // 10% bonus
-                    console.log(`Set 1.1x extra multiplier for ${player.player_name} (Pura)`);
-                } else if (player.owner === "Mafia") {
-                    player.extra_mult = 1.3; // 30% bonus
-                    console.log(`Set 1.3x extra multiplier for ${player.player_name} (Mafia)`);
-                }
-                
-                // You could also set multipliers based on individual players
-                if (player.player_name.includes("Kohli")) {
-                    player.extra_mult = 1.5; // 50% bonus for Kohli
-                    console.log(`Set 1.5x extra multiplier for ${player.player_name}`);
-                }
-            }
+            console.log("Using multipliers from teams.csv file");
+            // We don't need to set any multipliers manually now
+            // They are loaded from the CSV file
         }
     </script>
 </body>
