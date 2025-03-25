@@ -253,6 +253,7 @@
                     wicket_other: 0,
                     balls_bowled: 0,
                     catches: 0,
+                    stumpings: 0,
                     run_outs: 0,
                     economy: 0,
                     high_score: 0,
@@ -501,9 +502,90 @@
                         } else if (dismissalType === 'catch' || dismissalType === 'caught') {
                             playerStats[bowlerCanonicalId].wicket_caught += 1;
                             playerStats[bowlerCanonicalId].matchStats[matchId].wicket_caught += 1;
+                            
+                            // Credit the catch to the catcher if available
+                            if (batsman.catcher && batsman.catcher.id) {
+                                const catcherId = String(batsman.catcher.id || "");
+                                const catcherName = batsman.catcher.name || "";
+                                
+                                if (catcherId && catcherName) {
+                                    const catcherCanonicalId = getOrCreatePlayer(catcherId, catcherName);
+                                    
+                                    if (catcherCanonicalId && playerStats[catcherCanonicalId]) {
+                                        // Initialize catcher's match stats if needed
+                                        if (!playerStats[catcherCanonicalId].matchStats[matchId]) {
+                                            playerStats[catcherCanonicalId].matchStats[matchId] = {
+                                                runs: 0,
+                                                balls_faced: 0,
+                                                wickets: 0,
+                                                wicket_bowled: 0,
+                                                wicket_lbw: 0,
+                                                wicket_caught: 0,
+                                                wicket_stumped: 0,
+                                                wicket_other: 0,
+                                                balls_bowled: 0,
+                                                catches: 0,
+                                                run_outs: 0,
+                                                economy: 0,
+                                                high_score: 0,
+                                                strike_rate: 0,
+                                                runs_conceded: 0,
+                                                dot_balls: 0,
+                                                good_ones: 0
+                                            };
+                                        }
+                                        
+                                        // Update catch stats for the catcher
+                                        playerStats[catcherCanonicalId].catches += 1;
+                                        playerStats[catcherCanonicalId].matchStats[matchId].catches += 1;
+                                        console.log(`Credited catch to ${catcherName}`);
+                                    }
+                                }
+                            }
                         } else if (dismissalType === 'stumped') {
                             playerStats[bowlerCanonicalId].wicket_stumped += 1;
                             playerStats[bowlerCanonicalId].matchStats[matchId].wicket_stumped += 1;
+                            
+                            // Credit the stumping to the stumper if available
+                            if (batsman.catcher && batsman.catcher.id) {
+                                const stumperId = String(batsman.catcher.id || "");
+                                const stumperName = batsman.catcher.name || "";
+                                
+                                if (stumperId && stumperName) {
+                                    const stumperCanonicalId = getOrCreatePlayer(stumperId, stumperName);
+                                    
+                                    if (stumperCanonicalId && playerStats[stumperCanonicalId]) {
+                                        // Initialize stumper's match stats if needed
+                                        if (!playerStats[stumperCanonicalId].matchStats[matchId]) {
+                                            playerStats[stumperCanonicalId].matchStats[matchId] = {
+                                                runs: 0,
+                                                balls_faced: 0,
+                                                wickets: 0,
+                                                wicket_bowled: 0,
+                                                wicket_lbw: 0,
+                                                wicket_caught: 0,
+                                                wicket_stumped: 0,
+                                                wicket_other: 0,
+                                                balls_bowled: 0,
+                                                catches: 0,
+                                                run_outs: 0,
+                                                economy: 0,
+                                                high_score: 0,
+                                                strike_rate: 0,
+                                                runs_conceded: 0,
+                                                dot_balls: 0,
+                                                good_ones: 0
+                                            };
+                                        }
+                                        
+                                        // Update stumping stats
+                                        playerStats[stumperCanonicalId].stumpings = (playerStats[stumperCanonicalId].stumpings || 0) + 1;
+                                        playerStats[stumperCanonicalId].matchStats[matchId].stumpings = 
+                                            (playerStats[stumperCanonicalId].matchStats[matchId].stumpings || 0) + 1;
+                                        console.log(`Credited stumping to ${stumperName}`);
+                                    }
+                                }
+                            }
                         } else {
                             playerStats[bowlerCanonicalId].wicket_other += 1;
                             playerStats[bowlerCanonicalId].matchStats[matchId].wicket_other += 1;
@@ -989,8 +1071,9 @@
                               (stats.wickets >= 3 ? 15 : 0) + stats.dot_balls;
             }
             
-            // Fielding score (catches and run-outs)
-            const fielding_score = (stats.catches + stats.run_outs) * 10;
+            // Fielding score (catches, stumpings, and run-outs)
+            const stumpings = stats.stumpings || 0;
+            const fielding_score = (stats.catches + stats.run_outs + stumpings) * 10;
             
             // Final score for this match
             return batsman_score + bowlers_score + fielding_score + 4;
@@ -1016,11 +1099,9 @@
                             <th>Balls</th>
                             <th>Wickets</th>
                             <th>R.Conc</th>
-                            <th>Bld</th>
-                            <th>LBW</th>
-                            <th>Ct</th>
-                            <th>St</th>
+                            <th>Good</th>
                             <th>Ctch</th>
+                            <th>St</th>
                             <th>RO</th>
                             <th>1.3×</th>
                             <th>Score</th>
@@ -1039,6 +1120,12 @@
                 const starIcon = player.multipliedMatches && player.multipliedMatches.length > 0 ? 
                     ` 🌟×${player.multipliedMatches.length}` : '';
                 
+                // Calculate good_ones as the sum of bowled and LBW wickets
+                const good_ones = player.wicket_bowled + player.wicket_lbw;
+                
+                // Get stumpings or default to 0
+                const stumpings = player.stumpings || 0;
+                
                 tableHtml += `
                     <tr ${rowClass}>
                         <td>${index + 1}</td>
@@ -1048,11 +1135,9 @@
                         <td>${player.balls_faced}</td>
                         <td>${player.wickets}</td>
                         <td>${player.runs_conceded}</td>
-                        <td>${player.wicket_bowled}</td>
-                        <td>${player.wicket_lbw}</td>
-                        <td>${player.wicket_caught}</td>
-                        <td>${player.wicket_stumped}</td>
+                        <td>${good_ones}</td>
                         <td>${player.catches}</td>
+                        <td>${stumpings}</td>
                         <td>${player.run_outs}</td>
                         <td>${player.multiplier_count}</td>
                         <td><strong>${player.score}</strong></td>
