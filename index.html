@@ -1252,6 +1252,7 @@
                             <th>Balls</th>
                             <th>Wickets</th>
                             <th>Field</th>
+                            <th>1.3×</th>
                             <th>Mult</th>
                             <th>Score</th>
                         </tr>
@@ -1265,9 +1266,8 @@
                 const rowClass = player.multipliedMatches && player.multipliedMatches.length > 0 ? 
                     'style="background-color: #ffffd0;"' : '';
                 
-                // Create a star icon with the number of matches that got multiplier
-                const starIcon = player.multipliedMatches && player.multipliedMatches.length > 0 ? 
-                    ` 🌟` : '';
+                // Show multiplier count instead of just a star
+                const multiplierCount = player.multiplier_count || 0;
                 
                 // Get stumpings or default to 0
                 const stumpings = player.stumpings || 0;
@@ -1281,12 +1281,13 @@
                 tableHtml += `
                     <tr ${rowClass}>
                         <td>${index + 1}</td>
-                        <td>${player.player_name}${starIcon}</td>
+                        <td>${player.player_name}</td>
                         <td>${player.owner}</td>
                         <td>${player.runs}</td>
                         <td>${player.balls_faced}</td>
                         <td>${player.wickets}</td>
                         <td>${fieldingContributions}</td>
+                        <td>${multiplierCount}</td>
                         <td>${extraMultDisplay}</td>
                         <td><strong>${player.score}</strong></td>
                     </tr>
@@ -1352,6 +1353,7 @@
                             <thead>
                                 <tr>
                                     <th>Player</th>
+                                    <th>1.3×</th>
                                     <th>Mult</th>
                                     <th>Score</th>
                                 </tr>
@@ -1360,16 +1362,16 @@
                 `;
                 
                 team.players.forEach(player => {
-                    // Add star icon for players with multiplier
-                    const starIcon = player.multipliedMatches && player.multipliedMatches.length > 0 ? 
-                        ` 🌟` : '';
+                    // Show multiplier count
+                    const multiplierCount = player.multiplier_count || 0;
                     
                     // Format extra multiplier display
                     const extraMultDisplay = player.extra_mult !== 1.0 ? `×${player.extra_mult.toFixed(1)}` : '-';
                     
                     dashboardHtml += `
                         <tr>
-                            <td>${player.player_name}${starIcon}</td>
+                            <td>${player.player_name}</td>
+                            <td>${multiplierCount}</td>
                             <td>${extraMultDisplay}</td>
                             <td><strong>${player.score}</strong></td>
                         </tr>
@@ -1424,9 +1426,10 @@
             
             // Format extra multiplier display
             const extraMultDisplay = player.extra_mult !== 1.0 ? ` (×${player.extra_mult.toFixed(1)} extra multiplier)` : '';
+            const multiplierCountDisplay = player.multiplier_count > 0 ? ` (${player.multiplier_count}× got 1.3× match bonus)` : '';
             
             let historyHtml = `
-                <h2>${player.player_name}'s Match History${extraMultDisplay}</h2>
+                <h2>${player.player_name}'s Match History${extraMultDisplay}${multiplierCountDisplay}</h2>
                 <div class="stats-info">Owner: ${player.owner} | Total Score: ${player.score}</div>
             `;
             
