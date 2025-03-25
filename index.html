@@ -264,8 +264,8 @@
                 document.getElementById('update-time').textContent = now.toLocaleString();
                 document.getElementById('loading').style.display = 'none';
                 
-                // Initialize with the player table view
-                showTab('player-table-container');
+                // Initialize with the team dashboard view
+                showTab('team-dashboard');
                 
             } catch (error) {
                 console.error("Error fetching data:", error);
@@ -1189,8 +1189,10 @@
             console.log("Displaying player table");
             const container = document.getElementById('player-table-container');
             
-            // Get all players and sort by score (descending)
-            const players = Object.values(playerStats).sort((a, b) => b.score - a.score);
+            // Get all players and sort by score (descending), excluding players with "Unknown" owner
+            const players = Object.values(playerStats)
+                .filter(player => player.owner !== "Unknown")
+                .sort((a, b) => b.score - a.score);
             
             // Create table HTML
             let tableHtml = `
@@ -1274,7 +1276,10 @@
             // Collect player data by owner
             for (const playerId in playerStats) {
                 const player = playerStats[playerId];
-                const owner = player.owner || "Unknown";
+                const owner = player.owner || "";
+                
+                // Skip players with Unknown owner
+                if (owner === "Unknown") continue;
                 
                 if (!teamData[owner]) {
                     teamData[owner] = {
@@ -1357,13 +1362,13 @@
                 return;
             }
             
-            // Find player by name (case insensitive)
+            // Find player by name (case insensitive), excluding Unknown owner players
             const normalizedSearchName = playerName.toLowerCase();
             let foundPlayer = null;
             
             for (const playerId in playerStats) {
                 const player = playerStats[playerId];
-                if (player.player_name.toLowerCase().includes(normalizedSearchName)) {
+                if (player.owner !== "Unknown" && player.player_name.toLowerCase().includes(normalizedSearchName)) {
                     foundPlayer = player;
                     break;
                 }
