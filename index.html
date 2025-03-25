@@ -164,7 +164,7 @@
         <div id="error-container"></div>
         
         <div class="view-controls">
-            <button class="nav-btn tab-active" onclick="showTab('player-table')">Player Leaderboard</button>
+            <button class="nav-btn tab-active" onclick="showTab('player-table-container')">Player Leaderboard</button>
             <button class="nav-btn" onclick="showTab('team-dashboard')">Team Dashboard</button>
             <button class="nav-btn" onclick="showTab('player-matches')">Player Match History</button>
         </div>
@@ -200,6 +200,11 @@
         
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
+            // Log all container IDs to help with debugging
+            console.log("player-table-container exists:", !!document.getElementById('player-table-container'));
+            console.log("team-dashboard exists:", !!document.getElementById('team-dashboard'));
+            console.log("player-matches exists:", !!document.getElementById('player-matches'));
+            
             fetchData();
             // Auto-refresh every 5 minutes
             setInterval(fetchData, 5 * 60 * 1000);
@@ -258,6 +263,7 @@
                 // Step 4: Calculate and display player scores
                 calculatePlayerScores();
                 displayPlayerTable();
+                displayTeamDashboard();
                 
                 // Update the timestamp
                 const now = new Date();
@@ -1205,11 +1211,7 @@
                             <th>Runs</th>
                             <th>Balls</th>
                             <th>Wickets</th>
-                            <th>Conceded</th>
-                            <th>Good</th>
-                            <th>Dots</th>
-                            <th>S+C</th>
-                            <th>RO</th>
+                            <th>Field</th>
                             <th>Score</th>
                         </tr>
                     </thead>
@@ -1226,14 +1228,11 @@
                 const starIcon = player.multipliedMatches && player.multipliedMatches.length > 0 ? 
                     ` 🌟` : '';
                 
-                // Calculate good_ones as the sum of bowled and LBW wickets
-                const good_ones = player.wicket_bowled + player.wicket_lbw;
-                
                 // Get stumpings or default to 0
                 const stumpings = player.stumpings || 0;
                 
-                // Combine stumpings and catches
-                const stumpingsAndCatches = stumpings + player.catches;
+                // Combine stumpings, catches and run outs
+                const fieldingContributions = stumpings + player.catches + player.run_outs;
                 
                 tableHtml += `
                     <tr ${rowClass}>
@@ -1243,11 +1242,7 @@
                         <td>${player.runs}</td>
                         <td>${player.balls_faced}</td>
                         <td>${player.wickets}</td>
-                        <td>${player.runs_conceded}</td>
-                        <td>${good_ones}</td>
-                        <td>${player.dot_balls}</td>
-                        <td>${stumpingsAndCatches}</td>
-                        <td>${player.run_outs}</td>
+                        <td>${fieldingContributions}</td>
                         <td><strong>${player.score}</strong></td>
                     </tr>
                 `;
@@ -1312,11 +1307,6 @@
                             <thead>
                                 <tr>
                                     <th>Player</th>
-                                    <th>Runs</th>
-                                    <th>Wickets</th>
-                                    <th>Good</th>
-                                    <th>S+C</th>
-                                    <th>RO</th>
                                     <th>Score</th>
                                 </tr>
                             </thead>
@@ -1324,18 +1314,13 @@
                 `;
                 
                 team.players.forEach(player => {
-                    const good_ones = player.wicket_bowled + player.wicket_lbw;
-                    const stumpings = player.stumpings || 0;
-                    const stumpingsAndCatches = stumpings + player.catches;
-                    
+                    // Add star icon for players with multiplier
+                    const starIcon = player.multipliedMatches && player.multipliedMatches.length > 0 ? 
+                        ` 🌟` : '';
+                        
                     dashboardHtml += `
                         <tr>
-                            <td>${player.player_name}</td>
-                            <td>${player.runs}</td>
-                            <td>${player.wickets}</td>
-                            <td>${good_ones}</td>
-                            <td>${stumpingsAndCatches}</td>
-                            <td>${player.run_outs}</td>
+                            <td>${player.player_name}${starIcon}</td>
                             <td><strong>${player.score}</strong></td>
                         </tr>
                     `;
@@ -1532,13 +1517,23 @@
 
         // Function to show the selected tab
         function showTab(tabId) {
-            // Hide all tabs
+            console.log(`Showing tab: ${tabId}`);
+            
+            // Hide all tabs first with display: none
             document.getElementById('player-table-container').style.display = 'none';
             document.getElementById('team-dashboard').style.display = 'none';
             document.getElementById('player-matches').style.display = 'none';
             
-            // Show the selected tab
-            document.getElementById(tabId).style.display = 'block';
+            // Show the selected tab with display: block
+            if (tabId === 'player-table-container') {
+                document.getElementById('player-table-container').style.display = 'block';
+            } else if (tabId === 'team-dashboard') {
+                document.getElementById('team-dashboard').style.display = 'block';
+                // Always refresh team dashboard when showing it
+                displayTeamDashboard();
+            } else if (tabId === 'player-matches') {
+                document.getElementById('player-matches').style.display = 'block';
+            }
             
             // Update active tab button
             const buttons = document.querySelectorAll('.nav-btn');
@@ -1548,11 +1543,6 @@
                     button.classList.add('tab-active');
                 }
             });
-            
-            // If team dashboard is selected, generate it
-            if (tabId === 'team-dashboard') {
-                displayTeamDashboard();
-            }
         }
     </script>
 </body>
