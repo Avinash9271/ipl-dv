@@ -30,7 +30,7 @@ idx,id,amount,timestamp,player_id,team_id,player,owner
 28,45,1235,2025-03-22 09:17:52.703917,114,51,Suryakumar Yadav,Vidit
 29,46,665,2025-03-22 09:19:53.319320,73,48,Ajinkya Rahane,Dhruv
 30,47,1410,2025-03-22 09:20:56.968915,1,50,Ruturaj Gaikwad,Ayush
-31,48,785,2025-03-22 09:22:05.014641,50,45,B. Sai Sudharshan,Kaushik
+31,48,785,2025-03-22 09:22:05.014641,50,45,Sai Sudharshan,Kaushik
 32,49,750,2025-03-22 09:24:18.113408,3,44,Ravindra Jadeja,Vikhyat
 33,50,385,2025-03-22 09:26:32.535701,70,45,Glenn Phillips,Kaushik
 34,51,540,2025-03-22 09:27:30.558026,145,48,Shashank Singh,Dhruv
@@ -66,7 +66,7 @@ idx,id,amount,timestamp,player_id,team_id,player,owner
 64,81,400,2025-03-22 10:02:41.390857,74,43,Rinku Singh,Sai
 65,82,550,2025-03-22 10:04:02.017022,27,42,Jake Fraser-McGurk,Adi
 66,83,100,2025-03-22 10:04:39.153079,122,51,Avesh Khan,Vidit
-67,84,105,2025-03-22 10:05:23.513655,9,46,Syed Khaleel Ahmed,Shreyansh
+67,84,105,2025-03-22 10:05:23.513655,9,46,Khaleel Ahmed,Shreyansh
 68,85,350,2025-03-22 10:06:27.121942,30,43,Tristian Stubbs,Sai
 69,86,250,2025-03-22 10:08:10.931304,6,49,Noor Ahmad,Rohan
 70,87,430,2025-03-22 10:10:00.528141,206,50,Pat Cummins,Ayush
@@ -96,12 +96,12 @@ idx,id,amount,timestamp,player_id,team_id,player,owner
 94,111,100,2025-03-22 10:43:25.618505,171,49,Wainindu Hasaranga,Rohan
 95,112,100,2025-03-22 10:44:39.566309,34,47,Mitchell Starc,Munish
 96,113,270,2025-03-22 10:45:24.556954,140,42,Shreyas Iyer,Adi
-97,114,100,2025-03-22 10:45:52.874862,125,42,Ravi Bisnoi,Adi
+97,114,100,2025-03-22 10:45:52.874862,125,42,Ravi Bishnoi,Adi
 98,115,550,2025-03-22 10:46:12.859831,188,45,Phil Salt,Kaushik
 99,116,300,2025-03-22 10:47:34.923983,38,42,Faf du Plessis,Adi
 100,117,300,2025-03-22 10:48:17.051432,94,49,Hardik Pandya,Rohan
 101,118,150,2025-03-22 10:49:30.740654,117,46,Rishabh Pant,Shreyansh
-102,119,250,2025-03-22 10:51:02.046661,209,42,Heinrich Klassen,Adi
+102,119,250,2025-03-22 10:51:02.046661,209,42,Heinrich Klaasen,Adi
 103,120,100,2025-03-22 10:52:01.025088,13,47,Sam Curran,Munish
 104,121,5,2025-03-22 10:59:55.129609,5,47,Matheesha Pathirana,Munish
 105,122,5,2025-03-22 11:01:33.511617,190,48,Liam Livingstone,Dhruv
