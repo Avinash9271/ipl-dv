@@ -724,7 +724,11 @@
                                         // Update catch stats for the catcher
                                         playerStats[catcherCanonicalId].catches += 1;
                                         playerStats[catcherCanonicalId].matchStats[matchId].catches += 1;
-                                        console.log(`Credited catch to ${catcherName}`);
+                                        console.log(`Credited catch to ${catcherName} (from batsman dismissal processing)`);
+                                        
+                                        // Add points for the catch (10 points per catch)
+                                        matchPlayerScores[catcherCanonicalId] = matchPlayerScores[catcherCanonicalId] || 0;
+                                        matchPlayerScores[catcherCanonicalId] += 10;
                                     }
                                 }
                             }
@@ -769,6 +773,10 @@
                                         playerStats[stumperCanonicalId].matchStats[matchId].stumpings = 
                                             (playerStats[stumperCanonicalId].matchStats[matchId].stumpings || 0) + 1;
                                         console.log(`Credited stumping to ${stumperName}`);
+                                        
+                                        // Add points for the stumping (10 points per stumping)
+                                        matchPlayerScores[stumperCanonicalId] = matchPlayerScores[stumperCanonicalId] || 0;
+                                        matchPlayerScores[stumperCanonicalId] += 10;
                                     }
                                 }
                             }
@@ -954,24 +962,23 @@
             const matchStats = playerStats[canonicalId].matchStats[matchId];
             
             // Get fielding contributions
-            const catches = parseInt(fielder.catch || 0);
+            // IMPORTANT: Skip catches as they're already processed in processBatsman
+            // Only process run outs here to avoid double counting
             const runOuts = parseInt(fielder.runout || 0);
             
-            // Update overall stats
-            playerStats[canonicalId].catches += catches;
+            // Update overall stats - only update run outs, not catches
             playerStats[canonicalId].run_outs += runOuts;
             
-            // Update match-specific stats
-            matchStats.catches += catches;
+            // Update match-specific stats - only update run outs, not catches
             matchStats.run_outs += runOuts;
             
-            // Calculate fielding score (10 points per catch/run-out)
-            const fieldingScore = (catches + runOuts) * 10;
+            // Calculate fielding score (10 points per run-out only, catches are already counted)
+            const fieldingScore = runOuts * 10;
             
             // Update player's score for this match
             matchPlayerScores[canonicalId] += fieldingScore;
             
-            console.log(`Added fielding stats for ${fielderName}: ${catches} catches, ${runOuts} run outs, score contribution: ${fieldingScore}`);
+            console.log(`Added fielding stats for ${fielderName}: ${runOuts} run outs, score contribution: ${fieldingScore}`);
         }
         
         // Helper to extract catcher ID - not needed with the scorecard API
@@ -1269,12 +1276,12 @@
                               (stats.wickets >= 3 ? 15 : 0) + stats.dot_balls;
             }
             
-            // Fielding score (catches, stumpings, and run-outs)
-            const stumpings = stats.stumpings || 0;
-            const fielding_score = (stats.catches + stats.run_outs + stumpings) * 10;
+            // Note: We no longer calculate fielding score here as it's now added during match processing
+            // to avoid double counting. The 10 points per catch/stumping/run-out are added directly
+            // to the player's match score when those events are processed.
             
-            // Final score for this match
-            return batsman_score + bowlers_score + fielding_score + 4;
+            // Final score for this match - just add the constant 4 points
+            return batsman_score + bowlers_score + 4;
         }
         
         // Function to display player table
