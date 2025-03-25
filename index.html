@@ -53,7 +53,7 @@
             border-radius: 5px;
             margin: 20px 0;
         }
-        .refresh-btn {
+        .refresh-btn, .nav-btn {
             background-color: #0056b3;
             color: white;
             border: none;
@@ -61,16 +61,98 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
-            display: block;
-            margin: 20px auto;
+            margin: 5px;
         }
-        .refresh-btn:hover {
+        .refresh-btn:hover, .nav-btn:hover {
             background-color: #003d7a;
+        }
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
         }
         .stats-info {
             text-align: center;
             margin-bottom: 20px;
             color: #666;
+        }
+        .view-controls {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        #player-search {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        #player-search input {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 10px;
+            width: 250px;
+        }
+        #player-search button {
+            padding: 8px 15px;
+            border: none;
+            background-color: #0056b3;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .tab-active {
+            background-color: #003d7a;
+        }
+        #team-dashboard, #player-matches {
+            display: none;
+        }
+        .team-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .team-card h3 {
+            color: #0056b3;
+            margin-top: 0;
+        }
+        .team-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        .match-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .match-card h3 {
+            color: #0056b3;
+            margin-top: 0;
+        }
+        .match-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .stat-box {
+            flex: 1;
+            min-width: 120px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+        .stat-box h4 {
+            margin: 0 0 5px 0;
+            color: #0056b3;
         }
     </style>
 </head>
@@ -80,8 +162,28 @@
         <div class="stats-info">Last updated: <span id="update-time"></span></div>
         <div id="loading">Loading player data...</div>
         <div id="error-container"></div>
+        
+        <div class="view-controls">
+            <button class="nav-btn tab-active" onclick="showTab('player-table')">Player Leaderboard</button>
+            <button class="nav-btn" onclick="showTab('team-dashboard')">Team Dashboard</button>
+            <button class="nav-btn" onclick="showTab('player-matches')">Player Match History</button>
+        </div>
+        
         <div id="player-table-container"></div>
-        <button class="refresh-btn" onclick="refreshData()">Refresh Data</button>
+        
+        <div id="team-dashboard"></div>
+        
+        <div id="player-matches">
+            <div id="player-search">
+                <input type="text" id="player-search-input" placeholder="Enter player name...">
+                <button onclick="searchPlayerMatches()">Show Matches</button>
+            </div>
+            <div id="player-matches-container"></div>
+        </div>
+        
+        <div class="button-container">
+            <button class="refresh-btn" onclick="refreshData()">Refresh Data</button>
+        </div>
     </div>
 
     <script>
@@ -161,6 +263,9 @@
                 const now = new Date();
                 document.getElementById('update-time').textContent = now.toLocaleString();
                 document.getElementById('loading').style.display = 'none';
+                
+                // Initialize with the player table view
+                showTab('player-table-container');
                 
             } catch (error) {
                 console.error("Error fetching data:", error);
@@ -1098,12 +1203,11 @@
                             <th>Runs</th>
                             <th>Balls</th>
                             <th>Wickets</th>
-                            <th>R.Conc</th>
+                            <th>Conceded</th>
                             <th>Good</th>
-                            <th>Ctch</th>
-                            <th>St</th>
+                            <th>Dots</th>
+                            <th>S+C</th>
                             <th>RO</th>
-                            <th>1.3×</th>
                             <th>Score</th>
                         </tr>
                     </thead>
@@ -1118,13 +1222,16 @@
                 
                 // Create a star icon with the number of matches that got multiplier
                 const starIcon = player.multipliedMatches && player.multipliedMatches.length > 0 ? 
-                    ` 🌟×${player.multipliedMatches.length}` : '';
+                    ` 🌟` : '';
                 
                 // Calculate good_ones as the sum of bowled and LBW wickets
                 const good_ones = player.wicket_bowled + player.wicket_lbw;
                 
                 // Get stumpings or default to 0
                 const stumpings = player.stumpings || 0;
+                
+                // Combine stumpings and catches
+                const stumpingsAndCatches = stumpings + player.catches;
                 
                 tableHtml += `
                     <tr ${rowClass}>
@@ -1136,10 +1243,9 @@
                         <td>${player.wickets}</td>
                         <td>${player.runs_conceded}</td>
                         <td>${good_ones}</td>
-                        <td>${player.catches}</td>
-                        <td>${stumpings}</td>
+                        <td>${player.dot_balls}</td>
+                        <td>${stumpingsAndCatches}</td>
                         <td>${player.run_outs}</td>
-                        <td>${player.multiplier_count}</td>
                         <td><strong>${player.score}</strong></td>
                     </tr>
                 `;
@@ -1155,6 +1261,213 @@
             
             // Update the container
             container.innerHTML = tableHtml;
+        }
+
+        // Function to display the team dashboard
+        function displayTeamDashboard() {
+            console.log("Displaying team dashboard");
+            const container = document.getElementById('team-dashboard');
+            
+            // Group players by owner
+            const teamData = {};
+            
+            // Collect player data by owner
+            for (const playerId in playerStats) {
+                const player = playerStats[playerId];
+                const owner = player.owner || "Unknown";
+                
+                if (!teamData[owner]) {
+                    teamData[owner] = {
+                        owner: owner,
+                        players: [],
+                        totalScore: 0
+                    };
+                }
+                
+                teamData[owner].players.push(player);
+                teamData[owner].totalScore += player.score;
+            }
+            
+            // Convert to array and sort by total score
+            const teams = Object.values(teamData).sort((a, b) => b.totalScore - a.totalScore);
+            
+            // Create dashboard HTML
+            let dashboardHtml = `
+                <h2 style="text-align: center;">Team Dashboard</h2>
+            `;
+            
+            teams.forEach((team, index) => {
+                // Sort team players by score
+                team.players.sort((a, b) => b.score - a.score);
+                
+                dashboardHtml += `
+                    <div class="team-card">
+                        <h3>${index + 1}. ${team.owner} - ${team.totalScore} points</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Player</th>
+                                    <th>Runs</th>
+                                    <th>Wickets</th>
+                                    <th>Good</th>
+                                    <th>S+C</th>
+                                    <th>RO</th>
+                                    <th>Score</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                team.players.forEach(player => {
+                    const good_ones = player.wicket_bowled + player.wicket_lbw;
+                    const stumpings = player.stumpings || 0;
+                    const stumpingsAndCatches = stumpings + player.catches;
+                    
+                    dashboardHtml += `
+                        <tr>
+                            <td>${player.player_name}</td>
+                            <td>${player.runs}</td>
+                            <td>${player.wickets}</td>
+                            <td>${good_ones}</td>
+                            <td>${stumpingsAndCatches}</td>
+                            <td>${player.run_outs}</td>
+                            <td><strong>${player.score}</strong></td>
+                        </tr>
+                    `;
+                });
+                
+                dashboardHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            });
+            
+            // Update the container
+            container.innerHTML = dashboardHtml;
+        }
+
+        // Function to search for a player's match history
+        function searchPlayerMatches() {
+            const playerName = document.getElementById('player-search-input').value.trim();
+            const container = document.getElementById('player-matches-container');
+            
+            if (!playerName) {
+                container.innerHTML = `<div class="error">Please enter a player name to search</div>`;
+                return;
+            }
+            
+            // Find player by name (case insensitive)
+            const normalizedSearchName = playerName.toLowerCase();
+            let foundPlayer = null;
+            
+            for (const playerId in playerStats) {
+                const player = playerStats[playerId];
+                if (player.player_name.toLowerCase().includes(normalizedSearchName)) {
+                    foundPlayer = player;
+                    break;
+                }
+            }
+            
+            if (!foundPlayer) {
+                container.innerHTML = `<div class="error">No player found with name "${playerName}"</div>`;
+                return;
+            }
+            
+            // Display player's match history
+            displayPlayerMatchHistory(foundPlayer);
+        }
+
+        // Function to display a player's match history
+        function displayPlayerMatchHistory(player) {
+            const container = document.getElementById('player-matches-container');
+            
+            let historyHtml = `
+                <h2>${player.player_name}'s Match History</h2>
+                <div class="stats-info">Owner: ${player.owner} | Total Score: ${player.score}</div>
+            `;
+            
+            if (!player.matchStats || Object.keys(player.matchStats).length === 0) {
+                historyHtml += `<div class="error">No match data found for this player</div>`;
+                container.innerHTML = historyHtml;
+                return;
+            }
+            
+            // Sort matches by date (assuming match IDs are somewhat chronological)
+            const matchIds = Object.keys(player.matchStats).sort();
+            
+            matchIds.forEach((matchId, index) => {
+                const matchStats = player.matchStats[matchId];
+                const matchScore = player.matchScores[matchId] || 0;
+                
+                // Check if player got multiplier for this match
+                const gotMultiplier = player.multipliedMatches && player.multipliedMatches.includes(matchId);
+                const multiplierIcon = gotMultiplier ? '🌟 (1.3× bonus applied)' : '';
+                
+                // Calculate good_ones as the sum of bowled and LBW wickets
+                const good_ones = matchStats.wicket_bowled + matchStats.wicket_lbw;
+                
+                // Get stumpings or default to 0
+                const stumpings = matchStats.stumpings || 0;
+                
+                historyHtml += `
+                    <div class="match-card">
+                        <h3>Match ${index + 1} ${multiplierIcon}</h3>
+                        <div class="match-details">
+                            <div class="stat-box">
+                                <h4>Batting</h4>
+                                <p>Runs: ${matchStats.runs}</p>
+                                <p>Balls: ${matchStats.balls_faced}</p>
+                                <p>SR: ${matchStats.strike_rate.toFixed(2)}</p>
+                            </div>
+                            <div class="stat-box">
+                                <h4>Bowling</h4>
+                                <p>Wickets: ${matchStats.wickets}</p>
+                                <p>Good ones: ${good_ones}</p>
+                                <p>Conceded: ${matchStats.runs_conceded}</p>
+                                <p>Dots: ${matchStats.dot_balls}</p>
+                            </div>
+                            <div class="stat-box">
+                                <h4>Fielding</h4>
+                                <p>Catches: ${matchStats.catches}</p>
+                                <p>Stumpings: ${stumpings}</p>
+                                <p>Run Outs: ${matchStats.run_outs}</p>
+                            </div>
+                            <div class="stat-box">
+                                <h4>Score</h4>
+                                <p><strong>${matchScore.toFixed(2)}</strong></p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = historyHtml;
+        }
+
+        // Function to show the selected tab
+        function showTab(tabId) {
+            // Hide all tabs
+            document.getElementById('player-table-container').style.display = 'none';
+            document.getElementById('team-dashboard').style.display = 'none';
+            document.getElementById('player-matches').style.display = 'none';
+            
+            // Show the selected tab
+            document.getElementById(tabId).style.display = 'block';
+            
+            // Update active tab button
+            const buttons = document.querySelectorAll('.nav-btn');
+            buttons.forEach(button => {
+                button.classList.remove('tab-active');
+                if (button.getAttribute('onclick').includes(tabId)) {
+                    button.classList.add('tab-active');
+                }
+            });
+            
+            // If team dashboard is selected, generate it
+            if (tabId === 'team-dashboard') {
+                displayTeamDashboard();
+            }
         }
     </script>
 </body>
