@@ -335,7 +335,7 @@
                     // Parse extra_mult from column 9 (index 8) if available
                     let extra_mult = 1.0; // Default value
                     if (values.length > 8 && values[8] && !isNaN(parseFloat(values[8]))) {
-                        extra_mult = parseFloat(values[8]);
+                        extra_mult = 1 + parseFloat(values[8]);
                         console.log(`Found extra multiplier ${extra_mult} for ${player_name}`);
                     }
                     
