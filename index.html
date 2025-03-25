@@ -296,8 +296,8 @@
         // Function to fetch match details
         async function fetchMatchDetails(apiKey, matchId) {
             try {
-                console.log(`Fetching details for match: ${matchId}`);
-                const url = addTimestamp(`https://api.cricapi.com/v1/match_bbb?apikey=${apiKey}&id=${matchId}`);
+                console.log(`Fetching scorecard for match: ${matchId}`);
+                const url = addTimestamp(`https://api.cricapi.com/v1/match_scorecard?apikey=${apiKey}&id=${matchId}`);
                 
                 const response = await fetch(url, {
                     method: 'GET',
@@ -309,7 +309,7 @@
                 }
                 
                 const data = await response.json();
-                console.log(`Match details API Response for ${matchId}:`, data.status);
+                console.log(`Match scorecard API Response for ${matchId}:`, data.status);
                 return data;
                 
             } catch (error) {
@@ -320,23 +320,42 @@
         
         // Function to process match data and update player stats
         function processMatchData(matchData) {
-            console.log("Processing match data");
+            console.log("Processing match data from scorecard");
             
-            if (!matchData || !matchData.data || !matchData.data.bbb) {
-                console.warn("No ball-by-ball data found in match");
+            if (!matchData || !matchData.data || !matchData.data.scorecard) {
+                console.warn("No scorecard data found in match");
                 return;
             }
             
-            const balls = matchData.data.bbb;
             const matchId = matchData.data.id;
-            console.log(`Processing ${balls.length} balls for match: ${matchId}`);
+            const scorecard = matchData.data.scorecard;
+            console.log(`Processing scorecard for match: ${matchId}`);
             
             // Reset player scores for this match
             const matchPlayerScores = {};
             
-            // Process each ball
-            balls.forEach(ball => {
-                processBall(ball, matchId, matchPlayerScores);
+            // Process each innings
+            scorecard.forEach(inning => {
+                // Process batting stats
+                if (inning.batting) {
+                    inning.batting.forEach(batsman => {
+                        processBatsman(batsman, matchId, matchPlayerScores);
+                    });
+                }
+                
+                // Process bowling stats
+                if (inning.bowling) {
+                    inning.bowling.forEach(bowler => {
+                        processBowler(bowler, matchId, matchPlayerScores);
+                    });
+                }
+                
+                // Process fielding stats
+                if (inning.catching) {
+                    inning.catching.forEach(fielder => {
+                        processFielder(fielder, matchId, matchPlayerScores);
+                    });
+                }
             });
             
             // Store match scores for each player
@@ -369,60 +388,17 @@
             }
         }
         
-        // Function to process a single ball
-        function processBall(ball, matchId, matchPlayerScores) {
-            if (!ball || !ball.batsman || !ball.bowler) return;
+        // Process batsman stats
+        function processBatsman(batsman, matchId, matchPlayerScores) {
+            if (!batsman || !batsman.batsman || !batsman.batsman.id) return;
             
-            const batterId = String(ball.batsman.id || "");
-            const batterName = ball.batsman.name || "";
-            const bowlerId = String(ball.bowler.id || "");
-            const bowlerName = ball.bowler.name || "";
+            const batterId = String(batsman.batsman.id || "");
+            const batterName = batsman.batsman.name || "";
             
-            // Handle batsman stats
-            updatePlayerStats(batterId, batterName, ball, true, matchId, matchPlayerScores);
-            
-            // Handle bowler stats
-            updatePlayerStats(bowlerId, bowlerName, ball, false, matchId, matchPlayerScores);
-            
-            // Process fielding stats (catches, run outs)
-            if (ball.dismissal === "catch" && ball.catcher) {
-                const catcherId = getCatcherId(ball);
-                const catcherName = typeof ball.catcher === 'object' ? ball.catcher.name : ball.catcher;
-                if (catcherId) {
-                    // Get or create the player
-                    const playerId = getOrCreatePlayer(catcherId, catcherName);
-                    if (playerId && playerStats[playerId]) {
-                        playerStats[playerId].catches += 1;
-                        
-                        // Update player's score for this match
-                        matchPlayerScores[playerId] = (matchPlayerScores[playerId] || 0) + 10; // 10 points for a catch
-                    }
-                }
-            } else if (ball.dismissal && ball.dismissal.toLowerCase() === "run out") {
-                // Try to find the run out fielder if available
-                if (ball.fielder) {
-                    const fielderId = typeof ball.fielder === 'object' ? String(ball.fielder.id || "") : "";
-                    const fielderName = typeof ball.fielder === 'object' ? ball.fielder.name : ball.fielder;
-                    
-                    if (fielderId) {
-                        const playerId = getOrCreatePlayer(fielderId, fielderName);
-                        if (playerId && playerStats[playerId]) {
-                            playerStats[playerId].run_outs += 1;
-                            
-                            // Update player's score for this match
-                            matchPlayerScores[playerId] = (matchPlayerScores[playerId] || 0) + 10; // 10 points for a run out
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Function to update player stats
-        function updatePlayerStats(playerId, playerName, ball, isBatsman, matchId, matchPlayerScores) {
-            if (!playerId || !playerName) return;
+            if (!batterId || !batterName) return;
             
             // Get or create proper player ID to prevent duplicates
-            const canonicalId = getOrCreatePlayer(playerId, playerName);
+            const canonicalId = getOrCreatePlayer(batterId, batterName);
             
             if (!canonicalId || !playerStats[canonicalId]) return;
             
@@ -455,91 +431,222 @@
             // Get reference to this match's stats
             const matchStats = playerStats[canonicalId].matchStats[matchId];
             
-            if (isBatsman) {
-                // Update batting stats
-                const runs = parseInt(ball.runs || 0);
-                playerStats[canonicalId].runs += runs;
-                matchStats.runs += runs;
-                
-                // Only count as ball faced if it's not a wide or no ball
-                const isWide = ball.isWide || ball.type === "wide";
-                const isNoBall = ball.isNoBall || ball.type === "noball";
-                
-                if (!isWide && !isNoBall) {
-                    playerStats[canonicalId].balls_faced += 1;
-                    matchStats.balls_faced += 1;
-                }
-                
-                // Update high score for overall and match stats
-                if (matchStats.runs > playerStats[canonicalId].high_score) {
-                    playerStats[canonicalId].high_score = matchStats.runs;
-                }
-                
-                // Update strike rate for match stats
-                if (matchStats.balls_faced > 0) {
-                    matchStats.strike_rate = (matchStats.runs / matchStats.balls_faced) * 100;
-                }
-                
-                // Update strike rate for overall stats
-                if (playerStats[canonicalId].balls_faced > 0) {
-                    playerStats[canonicalId].strike_rate = 
-                        (playerStats[canonicalId].runs / playerStats[canonicalId].balls_faced) * 100;
-                }
-                
-                // Update player's score for this match
-                matchPlayerScores[canonicalId] += runs;
-            } else {
-                // Update bowling stats
-                playerStats[canonicalId].balls_bowled += 1;
-                matchStats.balls_bowled += 1;
-                
-                const runsConceded = parseInt(ball.runs || 0);
-                playerStats[canonicalId].runs_conceded += runsConceded;
-                matchStats.runs_conceded += runsConceded;
-                
-                // Check for dot ball
-                if (parseInt(ball.runs || 0) === 0) {
-                    playerStats[canonicalId].dot_balls += 1;
-                    matchStats.dot_balls += 1;
-                    matchPlayerScores[canonicalId] += 1; // 1 point for a dot ball
-                }
-                
-                // Check for wicket
-                if (ball.dismissal) {
-                    const dismissalType = ball.dismissal.toLowerCase();
-                    if (["bowled", "caught", "lbw", "stumped", "caught and bowled", "hit wicket"].includes(dismissalType)) {
-                        playerStats[canonicalId].wickets += 1;
-                        matchStats.wickets += 1;
-                        matchPlayerScores[canonicalId] += 20; // 20 points for a wicket
-                        
-                        // Check for good_one (bowled/lbw/caught and bowled)
-                        if (["bowled", "lbw", "caught and bowled"].includes(dismissalType)) {
-                            playerStats[canonicalId].good_ones += 1;
-                            matchStats.good_ones += 1;
-                            matchPlayerScores[canonicalId] += 10; // 10 points for a good_one
-                        }
-                    }
-                }
-                
-                // Calculate economy for match
-                if (matchStats.balls_bowled >= 6) {
-                    const overs = Math.floor(matchStats.balls_bowled / 6) + 
-                        (matchStats.balls_bowled % 6) / 10;
-                    matchStats.economy = matchStats.runs_conceded / overs;
-                }
-                
-                // Calculate economy for overall stats
-                if (playerStats[canonicalId].balls_bowled >= 6) {
-                    const overs = Math.floor(playerStats[canonicalId].balls_bowled / 6) + 
-                        (playerStats[canonicalId].balls_bowled % 6) / 10;
-                    playerStats[canonicalId].economy = 
-                        playerStats[canonicalId].runs_conceded / overs;
-                }
-                
-                // Update bowling points for this match
-                // The formula here should roughly match what we'll calculate in the final score
-                matchPlayerScores[canonicalId] += 3 * (1.5 - runsConceded); // Economy bonus/penalty
+            // Update batting stats
+            const runs = parseInt(batsman.r || 0);
+            const ballsFaced = parseInt(batsman.b || 0);
+            const fours = parseInt(batsman['4s'] || 0);
+            const sixes = parseInt(batsman['6s'] || 0);
+            const sr = parseFloat(batsman.sr || 0);
+            
+            // Update overall stats
+            playerStats[canonicalId].runs += runs;
+            playerStats[canonicalId].balls_faced += ballsFaced;
+            
+            // Update match-specific stats
+            matchStats.runs += runs;
+            matchStats.balls_faced += ballsFaced;
+            
+            // Estimate dot balls (total balls - boundaries)
+            // This is an approximation since we don't have actual dot ball count
+            const estimatedDotBalls = Math.max(0, ballsFaced - fours - sixes - Math.floor((runs - (fours * 4) - (sixes * 6)) / 2));
+            
+            // Update high score if this innings is higher
+            if (runs > playerStats[canonicalId].high_score) {
+                playerStats[canonicalId].high_score = runs;
             }
+            
+            // Update match high score
+            matchStats.high_score = runs;
+            
+            // Update strike rates
+            matchStats.strike_rate = sr;
+            if (playerStats[canonicalId].balls_faced > 0) {
+                playerStats[canonicalId].strike_rate = 
+                    (playerStats[canonicalId].runs / playerStats[canonicalId].balls_faced) * 100;
+            }
+            
+            // Calculate the batting score contribution for this match
+            // Formula: runs + (sr - 150) * max(runs, balls) + milestone bonuses
+            const srBonus = (sr / 100 - 1.5) * Math.max(runs, ballsFaced);
+            const milestoneBonus = (runs >= 50 ? 8 : 0) + (runs >= 100 ? 8 : 0);
+            const battingScore = runs + srBonus + milestoneBonus;
+            
+            // Update player's score for this match
+            matchPlayerScores[canonicalId] += battingScore;
+            
+            console.log(`Added batting stats for ${batterName}: ${runs} runs (${ballsFaced} balls), score contribution: ${battingScore.toFixed(2)}`);
+        }
+        
+        // Process bowler stats
+        function processBowler(bowler, matchId, matchPlayerScores) {
+            if (!bowler || !bowler.bowler || !bowler.bowler.id) return;
+            
+            const bowlerId = String(bowler.bowler.id || "");
+            const bowlerName = bowler.bowler.name || "";
+            
+            if (!bowlerId || !bowlerName) return;
+            
+            // Get or create proper player ID to prevent duplicates
+            const canonicalId = getOrCreatePlayer(bowlerId, bowlerName);
+            
+            if (!canonicalId || !playerStats[canonicalId]) return;
+            
+            // Initialize match score for this player if it doesn't exist
+            matchPlayerScores[canonicalId] = matchPlayerScores[canonicalId] || 0;
+            
+            // Initialize per-match stats tracking if it doesn't exist
+            if (!playerStats[canonicalId].matchStats) {
+                playerStats[canonicalId].matchStats = {};
+            }
+            
+            // Initialize this match's stats if they don't exist
+            if (!playerStats[canonicalId].matchStats[matchId]) {
+                playerStats[canonicalId].matchStats[matchId] = {
+                    runs: 0,
+                    balls_faced: 0,
+                    wickets: 0,
+                    balls_bowled: 0,
+                    catches: 0,
+                    run_outs: 0,
+                    economy: 0,
+                    high_score: 0,
+                    strike_rate: 0,
+                    runs_conceded: 0,
+                    dot_balls: 0,
+                    good_ones: 0
+                };
+            }
+            
+            // Get reference to this match's stats
+            const matchStats = playerStats[canonicalId].matchStats[matchId];
+            
+            // Parse bowling stats
+            const overs = parseFloat(bowler.o || 0);
+            const wickets = parseInt(bowler.w || 0);
+            const runsConceded = parseInt(bowler.r || 0);
+            const economy = parseFloat(bowler.eco || 0);
+            const wides = parseInt(bowler.wd || 0);
+            const noBalls = parseInt(bowler.nb || 0);
+            
+            // Calculate balls bowled (6 balls per over)
+            const completedOvers = Math.floor(overs);
+            const partialOver = (overs - completedOvers) * 10;
+            const ballsBowled = completedOvers * 6 + partialOver;
+            
+            // Update overall stats
+            playerStats[canonicalId].wickets += wickets;
+            playerStats[canonicalId].balls_bowled += ballsBowled;
+            playerStats[canonicalId].runs_conceded += runsConceded;
+            
+            // Update match-specific stats
+            matchStats.wickets += wickets;
+            matchStats.balls_bowled += ballsBowled;
+            matchStats.runs_conceded += runsConceded;
+            matchStats.economy = economy;
+            
+            // Estimate good wickets (bowled/lbw) - assuming 1/3 of wickets are "good ones"
+            const estimatedGoodOnes = Math.round(wickets / 3);
+            matchStats.good_ones += estimatedGoodOnes;
+            playerStats[canonicalId].good_ones += estimatedGoodOnes;
+            
+            // Estimate dot balls (assuming approximately 40% of legitimate deliveries are dot balls for a good bowler)
+            const legitimateDeliveries = ballsBowled - wides - noBalls;
+            const estimatedDotBalls = Math.round(legitimateDeliveries * (0.6 - economy/30)); // Adjust based on economy
+            matchStats.dot_balls += Math.max(0, estimatedDotBalls);
+            playerStats[canonicalId].dot_balls += Math.max(0, estimatedDotBalls);
+            
+            // Calculate economy for overall stats
+            if (playerStats[canonicalId].balls_bowled >= 6) {
+                const totalOvers = Math.floor(playerStats[canonicalId].balls_bowled / 6) + 
+                    (playerStats[canonicalId].balls_bowled % 6) / 10;
+                playerStats[canonicalId].economy = 
+                    playerStats[canonicalId].runs_conceded / totalOvers;
+            }
+            
+            // Calculate bowling score
+            // Formula: 3 * (1.5 * balls - runs) + 20 * wickets + 10 * good_ones + dot_balls + (wickets >= 3 ? 15 : 0)
+            const economyBonus = 3 * (1.5 * ballsBowled - runsConceded);
+            const wicketsBonus = wickets * 20;
+            const goodOnesBonus = estimatedGoodOnes * 10;
+            const dotBallsBonus = Math.max(0, estimatedDotBalls);
+            const threeWicketBonus = (wickets >= 3) ? 15 : 0;
+            
+            const bowlingScore = economyBonus + wicketsBonus + goodOnesBonus + dotBallsBonus + threeWicketBonus;
+            
+            // Update player's score for this match
+            matchPlayerScores[canonicalId] += bowlingScore;
+            
+            console.log(`Added bowling stats for ${bowlerName}: ${wickets} wickets (${runsConceded} runs), score contribution: ${bowlingScore.toFixed(2)}`);
+        }
+        
+        // Process fielder stats
+        function processFielder(fielder, matchId, matchPlayerScores) {
+            if (!fielder || !fielder.catcher || !fielder.catcher.id) return;
+            
+            const fielderId = String(fielder.catcher.id || "");
+            const fielderName = fielder.catcher.name || "";
+            
+            if (!fielderId || !fielderName) return;
+            
+            // Get or create proper player ID to prevent duplicates
+            const canonicalId = getOrCreatePlayer(fielderId, fielderName);
+            
+            if (!canonicalId || !playerStats[canonicalId]) return;
+            
+            // Initialize match score for this player if it doesn't exist
+            matchPlayerScores[canonicalId] = matchPlayerScores[canonicalId] || 0;
+            
+            // Initialize per-match stats tracking if it doesn't exist
+            if (!playerStats[canonicalId].matchStats) {
+                playerStats[canonicalId].matchStats = {};
+            }
+            
+            // Initialize this match's stats if they don't exist
+            if (!playerStats[canonicalId].matchStats[matchId]) {
+                playerStats[canonicalId].matchStats[matchId] = {
+                    runs: 0,
+                    balls_faced: 0,
+                    wickets: 0,
+                    balls_bowled: 0,
+                    catches: 0,
+                    run_outs: 0,
+                    economy: 0,
+                    high_score: 0,
+                    strike_rate: 0,
+                    runs_conceded: 0,
+                    dot_balls: 0,
+                    good_ones: 0
+                };
+            }
+            
+            // Get reference to this match's stats
+            const matchStats = playerStats[canonicalId].matchStats[matchId];
+            
+            // Get fielding contributions
+            const catches = parseInt(fielder.catch || 0);
+            const runOuts = parseInt(fielder.runout || 0);
+            
+            // Update overall stats
+            playerStats[canonicalId].catches += catches;
+            playerStats[canonicalId].run_outs += runOuts;
+            
+            // Update match-specific stats
+            matchStats.catches += catches;
+            matchStats.run_outs += runOuts;
+            
+            // Calculate fielding score (10 points per catch/run-out)
+            const fieldingScore = (catches + runOuts) * 10;
+            
+            // Update player's score for this match
+            matchPlayerScores[canonicalId] += fieldingScore;
+            
+            console.log(`Added fielding stats for ${fielderName}: ${catches} catches, ${runOuts} run outs, score contribution: ${fieldingScore}`);
+        }
+        
+        // Helper to extract catcher ID - not needed with the scorecard API
+        function getCatcherId(ball) {
+            // This function is no longer used with the scorecard API
+            return null;
         }
         
         // Function to get existing player or create a new one, preventing duplicates
@@ -720,22 +827,6 @@
             }
             
             console.log(`Merged stats for ${target.player_name}`);
-        }
-        
-        // Helper to extract catcher ID - schema might vary
-        function getCatcherId(ball) {
-            if (ball.catcher && typeof ball.catcher === 'object' && ball.catcher.id) {
-                return String(ball.catcher.id);
-            } else if (ball.catcher && typeof ball.catcher === 'string') {
-                // Look up player by name
-                const catcherName = ball.catcher.toLowerCase();
-                for (const [playerName, playerId] of Object.entries(playerNameToId)) {
-                    if (playerName === catcherName) {
-                        return playerId;
-                    }
-                }
-            }
-            return null;
         }
         
         // Helper function to find owner info by player name
