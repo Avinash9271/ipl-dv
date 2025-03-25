@@ -1396,6 +1396,79 @@
             // Sort matches by date (assuming match IDs are somewhat chronological)
             const matchIds = Object.keys(player.matchStats).sort();
             
+            // Create a table showing all matches with detailed stats
+            historyHtml += `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Match</th>
+                            <th>Runs</th>
+                            <th>Balls</th>
+                            <th>SR</th>
+                            <th>Wickets</th>
+                            <th>Conceded</th>
+                            <th>Good</th>
+                            <th>Dots</th>
+                            <th>S+C</th>
+                            <th>RO</th>
+                            <th>Bonus</th>
+                            <th>Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            matchIds.forEach((matchId, index) => {
+                const matchStats = player.matchStats[matchId];
+                const matchScore = player.matchScores[matchId] || 0;
+                
+                // Check if player got multiplier for this match
+                const gotMultiplier = player.multipliedMatches && player.multipliedMatches.includes(matchId);
+                const multiplierIcon = gotMultiplier ? '🌟' : '';
+                
+                // Calculate good_ones as the sum of bowled and LBW wickets
+                const good_ones = matchStats.wicket_bowled + matchStats.wicket_lbw;
+                
+                // Get stumpings or default to 0
+                const stumpings = matchStats.stumpings || 0;
+                
+                // Combine stumpings and catches
+                const stumpingsAndCatches = stumpings + matchStats.catches;
+                
+                // Calculate strike rate with proper formatting
+                const strikeRate = matchStats.balls_faced > 0 
+                    ? (matchStats.runs / matchStats.balls_faced * 100).toFixed(2) 
+                    : '-';
+                
+                // Determine row class for highlighting
+                const rowClass = gotMultiplier ? 'style="background-color: #ffffd0;"' : '';
+                
+                historyHtml += `
+                    <tr ${rowClass}>
+                        <td>Match ${index + 1}</td>
+                        <td>${matchStats.runs}</td>
+                        <td>${matchStats.balls_faced}</td>
+                        <td>${strikeRate}</td>
+                        <td>${matchStats.wickets}</td>
+                        <td>${matchStats.runs_conceded}</td>
+                        <td>${good_ones}</td>
+                        <td>${matchStats.dot_balls}</td>
+                        <td>${stumpingsAndCatches}</td>
+                        <td>${matchStats.run_outs}</td>
+                        <td>${multiplierIcon}</td>
+                        <td><strong>${matchScore.toFixed(0)}</strong></td>
+                    </tr>
+                `;
+            });
+            
+            historyHtml += `
+                    </tbody>
+                </table>
+            `;
+            
+            // Add additional detailed view below the table
+            historyHtml += `<h3>Match Details</h3>`;
+            
             matchIds.forEach((matchId, index) => {
                 const matchStats = player.matchStats[matchId];
                 const matchScore = player.matchScores[matchId] || 0;
@@ -1418,14 +1491,19 @@
                                 <h4>Batting</h4>
                                 <p>Runs: ${matchStats.runs}</p>
                                 <p>Balls: ${matchStats.balls_faced}</p>
-                                <p>SR: ${matchStats.strike_rate.toFixed(2)}</p>
+                                <p>SR: ${matchStats.strike_rate ? matchStats.strike_rate.toFixed(2) : '-'}</p>
                             </div>
                             <div class="stat-box">
                                 <h4>Bowling</h4>
                                 <p>Wickets: ${matchStats.wickets}</p>
-                                <p>Good ones: ${good_ones}</p>
+                                <p>Good ones (B+LBW): ${good_ones}</p>
+                                <p>Bowled: ${matchStats.wicket_bowled}</p>
+                                <p>LBW: ${matchStats.wicket_lbw}</p>
+                                <p>Caught: ${matchStats.wicket_caught}</p>
+                                <p>Stumped: ${matchStats.wicket_stumped}</p>
                                 <p>Conceded: ${matchStats.runs_conceded}</p>
                                 <p>Dots: ${matchStats.dot_balls}</p>
+                                <p>Balls bowled: ${matchStats.balls_bowled}</p>
                             </div>
                             <div class="stat-box">
                                 <h4>Fielding</h4>
@@ -1434,8 +1512,10 @@
                                 <p>Run Outs: ${matchStats.run_outs}</p>
                             </div>
                             <div class="stat-box">
-                                <h4>Score</h4>
-                                <p><strong>${matchScore.toFixed(2)}</strong></p>
+                                <h4>Score Breakdown</h4>
+                                <p>Base: ${(matchScore / (gotMultiplier ? 1.3 : 1)).toFixed(2)}</p>
+                                ${gotMultiplier ? `<p>Multiplier: ×1.3</p>` : ''}
+                                <p><strong>Final: ${matchScore.toFixed(2)}</strong></p>
                             </div>
                         </div>
                     </div>
