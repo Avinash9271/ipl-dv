@@ -246,6 +246,11 @@
                     runs: 0,
                     balls_faced: 0,
                     wickets: 0,
+                    wicket_bowled: 0,
+                    wicket_lbw: 0,
+                    wicket_caught: 0,
+                    wicket_stumped: 0,
+                    wicket_other: 0,
                     balls_bowled: 0,
                     catches: 0,
                     run_outs: 0,
@@ -257,7 +262,8 @@
                     good_ones: 0,
                     score: 0,
                     matchScores: {}, // Track scores per match
-                    matchStats: {}   // Track stats per match
+                    matchStats: {},  // Track stats per match
+                    multiplier_count: 0 // Track how many times player got 1.3x multiplier
                 };
             }
             console.log("Initialized player stats for", Object.keys(playerStats).length, "players");
@@ -416,6 +422,11 @@
                     runs: 0,
                     balls_faced: 0,
                     wickets: 0,
+                    wicket_bowled: 0,
+                    wicket_lbw: 0,
+                    wicket_caught: 0,
+                    wicket_stumped: 0,
+                    wicket_other: 0,
                     balls_bowled: 0,
                     catches: 0,
                     run_outs: 0,
@@ -446,9 +457,60 @@
             matchStats.runs += runs;
             matchStats.balls_faced += ballsFaced;
             
-            // Estimate dot balls (total balls - boundaries)
-            // This is an approximation since we don't have actual dot ball count
-            const estimatedDotBalls = Math.max(0, ballsFaced - fours - sixes - Math.floor((runs - (fours * 4) - (sixes * 6)) / 2));
+            // Check if there is a dismissal and update the bowler's wicket types
+            if (batsman.dismissal && batsman.bowler && batsman.bowler.id) {
+                const dismissalType = batsman.dismissal.toLowerCase();
+                const bowlerId = String(batsman.bowler.id || "");
+                const bowlerName = batsman.bowler.name || "";
+                
+                if (bowlerId && bowlerName) {
+                    // Get or create the bowler
+                    const bowlerCanonicalId = getOrCreatePlayer(bowlerId, bowlerName);
+                    
+                    if (bowlerCanonicalId && playerStats[bowlerCanonicalId]) {
+                        // Initialize bowler's match stats if needed
+                        if (!playerStats[bowlerCanonicalId].matchStats[matchId]) {
+                            playerStats[bowlerCanonicalId].matchStats[matchId] = {
+                                runs: 0,
+                                balls_faced: 0,
+                                wickets: 0,
+                                wicket_bowled: 0,
+                                wicket_lbw: 0,
+                                wicket_caught: 0,
+                                wicket_stumped: 0,
+                                wicket_other: 0,
+                                balls_bowled: 0,
+                                catches: 0,
+                                run_outs: 0,
+                                economy: 0,
+                                high_score: 0,
+                                strike_rate: 0,
+                                runs_conceded: 0,
+                                dot_balls: 0,
+                                good_ones: 0
+                            };
+                        }
+                        
+                        // Update wicket type for the bowler
+                        if (dismissalType === 'bowled') {
+                            playerStats[bowlerCanonicalId].wicket_bowled += 1;
+                            playerStats[bowlerCanonicalId].matchStats[matchId].wicket_bowled += 1;
+                        } else if (dismissalType === 'lbw') {
+                            playerStats[bowlerCanonicalId].wicket_lbw += 1;
+                            playerStats[bowlerCanonicalId].matchStats[matchId].wicket_lbw += 1;
+                        } else if (dismissalType === 'catch' || dismissalType === 'caught') {
+                            playerStats[bowlerCanonicalId].wicket_caught += 1;
+                            playerStats[bowlerCanonicalId].matchStats[matchId].wicket_caught += 1;
+                        } else if (dismissalType === 'stumped') {
+                            playerStats[bowlerCanonicalId].wicket_stumped += 1;
+                            playerStats[bowlerCanonicalId].matchStats[matchId].wicket_stumped += 1;
+                        } else {
+                            playerStats[bowlerCanonicalId].wicket_other += 1;
+                            playerStats[bowlerCanonicalId].matchStats[matchId].wicket_other += 1;
+                        }
+                    }
+                }
+            }
             
             // Update high score if this innings is higher
             if (runs > playerStats[canonicalId].high_score) {
@@ -505,6 +567,11 @@
                     runs: 0,
                     balls_faced: 0,
                     wickets: 0,
+                    wicket_bowled: 0,
+                    wicket_lbw: 0,
+                    wicket_caught: 0,
+                    wicket_stumped: 0,
+                    wicket_other: 0,
                     balls_bowled: 0,
                     catches: 0,
                     run_outs: 0,
@@ -544,16 +611,10 @@
             matchStats.runs_conceded += runsConceded;
             matchStats.economy = economy;
             
-            // Estimate good wickets (bowled/lbw) - assuming 1/3 of wickets are "good ones"
-            const estimatedGoodOnes = Math.round(wickets / 3);
-            matchStats.good_ones += estimatedGoodOnes;
-            playerStats[canonicalId].good_ones += estimatedGoodOnes;
-            
-            // Estimate dot balls (assuming approximately 40% of legitimate deliveries are dot balls for a good bowler)
-            const legitimateDeliveries = ballsBowled - wides - noBalls;
-            const estimatedDotBalls = Math.round(legitimateDeliveries * (0.6 - economy/30)); // Adjust based on economy
-            matchStats.dot_balls += Math.max(0, estimatedDotBalls);
-            playerStats[canonicalId].dot_balls += Math.max(0, estimatedDotBalls);
+            // Estimate dot balls using the formula: max(balls_bowled - runs_conceded / 2, 0)
+            const estimatedDotBalls = Math.max(0, ballsBowled - runsConceded / 2);
+            matchStats.dot_balls += Math.round(estimatedDotBalls);
+            playerStats[canonicalId].dot_balls += Math.round(estimatedDotBalls);
             
             // Calculate economy for overall stats
             if (playerStats[canonicalId].balls_bowled >= 6) {
@@ -565,10 +626,12 @@
             
             // Calculate bowling score
             // Formula: 3 * (1.5 * balls - runs) + 20 * wickets + 10 * good_ones + dot_balls + (wickets >= 3 ? 15 : 0)
+            // Note: We now calculate good_ones as the sum of wicket_bowled and wicket_lbw
             const economyBonus = 3 * (1.5 * ballsBowled - runsConceded);
             const wicketsBonus = wickets * 20;
-            const goodOnesBonus = estimatedGoodOnes * 10;
-            const dotBallsBonus = Math.max(0, estimatedDotBalls);
+            const goodOnes = playerStats[canonicalId].wicket_bowled + playerStats[canonicalId].wicket_lbw;
+            const goodOnesBonus = goodOnes * 10;
+            const dotBallsBonus = Math.round(estimatedDotBalls);
             const threeWicketBonus = (wickets >= 3) ? 15 : 0;
             
             const bowlingScore = economyBonus + wicketsBonus + goodOnesBonus + dotBallsBonus + threeWicketBonus;
@@ -724,6 +787,11 @@
                     runs: 0,
                     balls_faced: 0,
                     wickets: 0,
+                    wicket_bowled: 0,
+                    wicket_lbw: 0,
+                    wicket_caught: 0,
+                    wicket_stumped: 0,
+                    wicket_other: 0,
                     balls_bowled: 0,
                     catches: 0,
                     run_outs: 0,
@@ -735,7 +803,8 @@
                     good_ones: 0,
                     score: 0,
                     matchScores: {}, // Track scores per match
-                    matchStats: {}   // Track stats per match
+                    matchStats: {},   // Track stats per match
+                    multiplier_count: 0 // Track how many times player got 1.3x multiplier
                 };
                 console.log(`Added new player: ${playerName} (${playerId})`);
             }
@@ -803,6 +872,11 @@
             target.runs += source.runs;
             target.balls_faced += source.balls_faced;
             target.wickets += source.wickets;
+            target.wicket_bowled += source.wicket_bowled || 0;
+            target.wicket_lbw += source.wicket_lbw || 0;
+            target.wicket_caught += source.wicket_caught || 0;
+            target.wicket_stumped += source.wicket_stumped || 0;
+            target.wicket_other += source.wicket_other || 0;
             target.balls_bowled += source.balls_bowled;
             target.catches += source.catches;
             target.run_outs += source.run_outs;
@@ -854,6 +928,7 @@
                 
                 // Reset the player's total score
                 player.score = 0;
+                player.multiplier_count = 0;
                 
                 // Track which matches received multipliers
                 const multipliedMatches = [];
@@ -870,6 +945,7 @@
                         if (matchHighestScorers[matchId] && matchHighestScorers[matchId].playerId === playerId) {
                             matchScore = matchScore * 1.3;
                             multipliedMatches.push(matchId);
+                            player.multiplier_count += 1;
                             console.log(`Applied 1.3x multiplier to ${player.player_name}'s score of ${(matchScore/1.3).toFixed(2)} → ${matchScore.toFixed(2)} in match ${matchId}`);
                         }
                         
@@ -905,8 +981,11 @@
             // Bowling score
             let bowlers_score = 0;
             if (stats.balls_bowled > 0) {
+                // Calculate good ones as the sum of bowled and lbw dismissals
+                const good_ones = stats.wicket_bowled + stats.wicket_lbw;
+                
                 bowlers_score = 3 * (1.5 * stats.balls_bowled - stats.runs_conceded) + 
-                              stats.wickets * 20 + stats.good_ones * 10 + 
+                              stats.wickets * 20 + good_ones * 10 + 
                               (stats.wickets >= 3 ? 15 : 0) + stats.dot_balls;
             }
             
@@ -934,12 +1013,16 @@
                             <th>Player</th>
                             <th>Owner</th>
                             <th>Runs</th>
-                            <th>SR</th>
+                            <th>Balls</th>
                             <th>Wickets</th>
-                            <th>Economy</th>
-                            <th>Dots</th>
-                            <th>Catches</th>
-                            <th>Run Outs</th>
+                            <th>R.Conc</th>
+                            <th>Bld</th>
+                            <th>LBW</th>
+                            <th>Ct</th>
+                            <th>St</th>
+                            <th>Ctch</th>
+                            <th>RO</th>
+                            <th>1.3×</th>
                             <th>Score</th>
                         </tr>
                     </thead>
@@ -962,12 +1045,16 @@
                         <td>${player.player_name}${starIcon}</td>
                         <td>${player.owner}</td>
                         <td>${player.runs}</td>
-                        <td>${player.strike_rate.toFixed(2)}</td>
+                        <td>${player.balls_faced}</td>
                         <td>${player.wickets}</td>
-                        <td>${player.economy.toFixed(2)}</td>
-                        <td>${player.dot_balls}</td>
+                        <td>${player.runs_conceded}</td>
+                        <td>${player.wicket_bowled}</td>
+                        <td>${player.wicket_lbw}</td>
+                        <td>${player.wicket_caught}</td>
+                        <td>${player.wicket_stumped}</td>
                         <td>${player.catches}</td>
                         <td>${player.run_outs}</td>
+                        <td>${player.multiplier_count}</td>
                         <td><strong>${player.score}</strong></td>
                     </tr>
                 `;
