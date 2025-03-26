@@ -613,7 +613,8 @@
                     runs_conceded: 0,
                     dot_balls: 0,
                     good_ones: 0,
-                    score: 0,
+                    fours: 0,
+                    sixes: 0,
                     matchScores: {}, // Track scores per match
                     matchStats: {},  // Track stats per match
                     multiplier_count: 0 // Track how many times player got 1.3x multiplier
@@ -972,7 +973,9 @@
                     strike_rate: 0,
                     runs_conceded: 0,
                     dot_balls: 0,
-                    good_ones: 0
+                    good_ones: 0,
+                    fours: 0,
+                    sixes: 0
                 };
             }
             
@@ -989,10 +992,14 @@
             // Update overall stats
             playerStats[canonicalId].runs += runs;
             playerStats[canonicalId].balls_faced += ballsFaced;
+            playerStats[canonicalId].fours = (playerStats[canonicalId].fours || 0) + fours;
+            playerStats[canonicalId].sixes = (playerStats[canonicalId].sixes || 0) + sixes;
             
             // Update match-specific stats
             matchStats.runs += runs;
             matchStats.balls_faced += ballsFaced;
+            matchStats.fours += fours;
+            matchStats.sixes += sixes;
             
             // Check if there is a dismissal and update the bowler's wicket types
             if (batsman.dismissal && batsman.bowler && batsman.bowler.id) {
@@ -1024,7 +1031,9 @@
                                 strike_rate: 0,
                                 runs_conceded: 0,
                                 dot_balls: 0,
-                                good_ones: 0
+                                good_ones: 0,
+                                fours: 0,
+                                sixes: 0
                             };
                         }
                         
@@ -1067,7 +1076,9 @@
                                                 strike_rate: 0,
                                                 runs_conceded: 0,
                                                 dot_balls: 0,
-                                                good_ones: 0
+                                                good_ones: 0,
+                                                fours: 0,
+                                                sixes: 0
                                             };
                                         }
                                         
@@ -1112,7 +1123,9 @@
                                                 strike_rate: 0,
                                                 runs_conceded: 0,
                                                 dot_balls: 0,
-                                                good_ones: 0
+                                                good_ones: 0,
+                                                fours: 0,
+                                                sixes: 0
                                             };
                                         }
                                         
@@ -1202,7 +1215,9 @@
                     strike_rate: 0,
                     runs_conceded: 0,
                     dot_balls: 0,
-                    good_ones: 0
+                    good_ones: 0,
+                    fours: 0,
+                    sixes: 0
                 };
             }
             
@@ -1292,15 +1307,23 @@
                     runs: 0,
                     balls_faced: 0,
                     wickets: 0,
+                    wicket_bowled: 0,
+                    wicket_lbw: 0,
+                    wicket_caught: 0,
+                    wicket_stumped: 0,
+                    wicket_other: 0,
                     balls_bowled: 0,
                     catches: 0,
+                    stumpings: 0,
                     run_outs: 0,
                     economy: 0,
                     high_score: 0,
                     strike_rate: 0,
                     runs_conceded: 0,
                     dot_balls: 0,
-                    good_ones: 0
+                    good_ones: 0,
+                    fours: 0,
+                    sixes: 0
                 };
             }
             
@@ -1419,7 +1442,8 @@
                     runs_conceded: 0,
                     dot_balls: 0,
                     good_ones: 0,
-                    score: 0,
+                    fours: 0,
+                    sixes: 0,
                     matchScores: {}, // Track scores per match
                     matchStats: {},   // Track stats per match
                     multiplier_count: 0 // Track how many times player got 1.3x multiplier
@@ -1588,8 +1612,10 @@
             let batsman_score = 0;
             if (stats.balls_faced > 0) {
                 const sr = stats.runs / stats.balls_faced;
+                // Add bonus points for fours (0.5 each) and sixes (1 each)
+                const boundaryBonus = (stats.fours || 0) * 0.5 + (stats.sixes || 0) * 1;
                 batsman_score = stats.runs + (sr - 1.5) * Math.max(stats.runs, stats.balls_faced) + 
-                              (stats.runs >= 50 ? 8 : 0) + (stats.runs >= 100 ? 8 : 0);
+                              (stats.runs >= 50 ? 8 : 0) + (stats.runs >= 100 ? 8 : 0) + boundaryBonus;
             }
             
             // Bowling score
@@ -1631,6 +1657,8 @@
                             <th>Owner</th>
                             <th>Runs</th>
                             <th>Balls</th>
+                            <th>4s</th>
+                            <th>6s</th>
                             <th>Wickets</th>
                             <th>Field</th>
                             <th>1.3×</th>
@@ -1659,6 +1687,9 @@
                 // Format extra multiplier display
                 const extraMultDisplay = player.extra_mult !== 1.0 ? `×${player.extra_mult.toFixed(1)}` : '-';
                 
+                // Ensure score is rounded to 1 decimal place for display
+                const roundedScore = player.score.toFixed(1);
+                
                 tableHtml += `
                     <tr ${rowClass}>
                         <td>${index + 1}</td>
@@ -1666,11 +1697,13 @@
                         <td>${player.owner}</td>
                         <td>${player.runs}</td>
                         <td>${player.balls_faced}</td>
+                        <td>${player.fours || 0}</td>
+                        <td>${player.sixes || 0}</td>
                         <td>${player.wickets}</td>
                         <td>${fieldingContributions}</td>
                         <td>${multiplierCount}</td>
                         <td>${extraMultDisplay}</td>
-                        <td><strong>${player.score}</strong></td>
+                        <td><strong>${roundedScore}</strong></td>
                     </tr>
                 `;
             });
@@ -1693,34 +1726,38 @@
             const container = document.getElementById('team-dashboard');
             
             // Group players by owner
-            const teamData = {};
+            const teamsByOwner = {};
             
-            // Collect player data by owner
-            for (const playerId in playerStats) {
-                const player = playerStats[playerId];
-                const owner = player.owner || "";
+            // Filter out players with "Unknown" owner
+            Object.values(playerStats)
+                .filter(player => player.owner !== "Unknown")
+                .forEach(player => {
+                    if (!teamsByOwner[player.owner]) {
+                        teamsByOwner[player.owner] = [];
+                    }
+                    teamsByOwner[player.owner].push(player);
+                });
+            
+            // Calculate team scores
+            const teams = [];
+            
+            for (const owner in teamsByOwner) {
+                const players = teamsByOwner[owner];
+                const totalScore = players.reduce((sum, player) => sum + player.score, 0);
                 
-                // Skip players with Unknown owner
-                if (owner === "Unknown") continue;
-                
-                if (!teamData[owner]) {
-                    teamData[owner] = {
-                        owner: owner,
-                        players: [],
-                        totalScore: 0
-                    };
-                }
-                
-                teamData[owner].players.push(player);
-                teamData[owner].totalScore += player.score;
+                teams.push({
+                    owner: owner,
+                    players: players,
+                    totalScore: totalScore.toFixed(1)  // Round team score to 1 decimal place
+                });
             }
             
-            // Convert to array and sort by total score
-            const teams = Object.values(teamData).sort((a, b) => b.totalScore - a.totalScore);
+            // Sort teams by total score (descending)
+            teams.sort((a, b) => parseFloat(b.totalScore) - parseFloat(a.totalScore));
             
             // Create dashboard HTML
             let dashboardHtml = `
-                <h2 style="text-align: center;">Team Dashboard</h2>
+                <h2>Team Dashboard</h2>
                 <div class="accordion-container">
             `;
             
@@ -1744,7 +1781,7 @@
                                 <h3>${index + 1}. ${team.owner} - ${team.totalScore} points</h3>
                                 <p class="team-summary">
                                     ${team.players.length} players | 
-                                    Top: ${topPlayer ? topPlayer.player_name + ' (' + topPlayer.score + ')' : 'None'} | 
+                                    Top: ${topPlayer ? topPlayer.player_name + ' (' + topPlayer.score.toFixed(1) + ')' : 'None'} | 
                                     Total 1.3× bonuses: ${teamMultiplierCount}
                                 </p>
                             </div>
@@ -1770,12 +1807,15 @@
                     // Format extra multiplier display
                     const extraMultDisplay = player.extra_mult !== 1.0 ? `×${player.extra_mult.toFixed(1)}` : '-';
                     
+                    // Ensure score is rounded to 1 decimal place for display
+                    const roundedScore = player.score.toFixed(1);
+                    
                     dashboardHtml += `
                         <tr>
                             <td>${player.player_name}</td>
                             <td>${multiplierCount}</td>
                             <td>${extraMultDisplay}</td>
-                            <td><strong>${player.score}</strong></td>
+                            <td><strong>${roundedScore}</strong></td>
                         </tr>
                     `;
                 });
@@ -1851,9 +1891,12 @@
             const extraMultDisplay = player.extra_mult !== 1.0 ? ` (×${player.extra_mult.toFixed(1)} extra multiplier)` : '';
             const multiplierCountDisplay = player.multiplier_count > 0 ? ` (${player.multiplier_count}× got 1.3× match bonus)` : '';
             
+            // Ensure score is rounded to 1 decimal place for display
+            const roundedScore = player.score.toFixed(1);
+            
             let historyHtml = `
                 <h2>${player.player_name}'s Match History${extraMultDisplay}${multiplierCountDisplay}</h2>
-                <div class="stats-info">Owner: ${player.owner} | Total Score: ${player.score}</div>
+                <div class="stats-info">Owner: ${player.owner} | Total Score: ${roundedScore}</div>
             `;
             
             if (!player.matchStats || Object.keys(player.matchStats).length === 0) {
@@ -1873,59 +1916,58 @@
                             <th>Match</th>
                             <th>Runs</th>
                             <th>Balls</th>
-                            <th>SR</th>
+                            <th>4s</th>
+                            <th>6s</th>
                             <th>Wickets</th>
                             <th>Conceded</th>
-                            <th>Good</th>
+                            <th>SR/Econ</th>
                             <th>Dots</th>
-                            <th>S+C</th>
-                            <th>RO</th>
-                            <th>Bonus</th>
+                            <th>S+C+RO</th>
                             <th>Score</th>
                         </tr>
                     </thead>
                     <tbody>
             `;
             
-            matchIds.forEach((matchId, index) => {
+            // Add a row for each match
+            matchIds.forEach((matchId, i) => {
                 const matchStats = player.matchStats[matchId];
-                const matchScore = player.matchScores[matchId] || 0;
                 
-                // Check if player got multiplier for this match
-                const gotMultiplier = player.multipliedMatches && player.multipliedMatches.includes(matchId);
-                const multiplierIcon = gotMultiplier ? '🌟' : '';
+                // Format the economy or strike rate depending on whether the player bowled or batted
+                const srOrEcon = matchStats.balls_bowled > 0 
+                    ? `Econ: ${matchStats.economy ? matchStats.economy.toFixed(2) : '-'}` 
+                    : `SR: ${matchStats.strike_rate ? matchStats.strike_rate.toFixed(2) : '-'}`;
                 
-                // Calculate good_ones as the sum of bowled and LBW wickets
+                // Calculate combined fielding contributions
                 const good_ones = matchStats.wicket_bowled + matchStats.wicket_lbw;
                 
-                // Get stumpings or default to 0
+                // Get stumpings (might not exist)
                 const stumpings = matchStats.stumpings || 0;
                 
-                // Combine stumpings and catches
-                const stumpingsAndCatches = stumpings + matchStats.catches;
+                // Combined fielding stats
+                const stumpingsAndCatches = stumpings + matchStats.catches + matchStats.run_outs;
                 
-                // Calculate strike rate with proper formatting
+                // Calculate strike rate
                 const strikeRate = matchStats.balls_faced > 0 
                     ? (matchStats.runs / matchStats.balls_faced * 100).toFixed(2) 
                     : '-';
                 
-                // Determine row class for highlighting
-                const rowClass = gotMultiplier ? 'style="background-color: #ffffd0;"' : '';
+                const matchScore = player.matchScores[matchId] || 0;
+                const isHighScorer = matchStats.is_highest_scorer ? ' (1.3×)' : '';
                 
                 historyHtml += `
-                    <tr ${rowClass}>
-                        <td>Match ${index + 1}</td>
+                    <tr>
+                        <td>${i+1}</td>
                         <td>${matchStats.runs}</td>
                         <td>${matchStats.balls_faced}</td>
-                        <td>${strikeRate}</td>
+                        <td>${matchStats.fours || 0}</td>
+                        <td>${matchStats.sixes || 0}</td>
                         <td>${matchStats.wickets}</td>
                         <td>${matchStats.runs_conceded}</td>
-                        <td>${good_ones}</td>
+                        <td>${srOrEcon}</td>
                         <td>${matchStats.dot_balls}</td>
                         <td>${stumpingsAndCatches}</td>
-                        <td>${matchStats.run_outs}</td>
-                        <td>${multiplierIcon}</td>
-                        <td><strong>${matchScore.toFixed(0)}</strong></td>
+                        <td><strong>${matchScore.toFixed(1)}${isHighScorer}</strong></td>
                     </tr>
                 `;
             });
@@ -1943,7 +1985,7 @@
                 const matchScore = player.matchScores[matchId] || 0;
                 
                 // Check if player got multiplier for this match
-                const gotMultiplier = player.multipliedMatches && player.multipliedMatches.includes(matchId);
+                const gotMultiplier = matchStats.is_highest_scorer;
                 const multiplierIcon = gotMultiplier ? '🌟 (1.3× bonus applied)' : '';
                 
                 // Calculate good_ones as the sum of bowled and LBW wickets
@@ -1954,13 +1996,15 @@
                 
                 historyHtml += `
                     <div class="match-card">
-                        <h3>Match ${index + 1} ${multiplierIcon}</h3>
+                        <h3>Match ${index + 1}: ${matchIds[index]} ${multiplierIcon}</h3>
                         <div class="match-details">
                             <div class="stat-box">
                                 <h4>Batting</h4>
                                 <p>Runs: ${matchStats.runs}</p>
                                 <p>Balls: ${matchStats.balls_faced}</p>
                                 <p>SR: ${matchStats.strike_rate ? matchStats.strike_rate.toFixed(2) : '-'}</p>
+                                <p>4s: ${matchStats.fours || 0}</p>
+                                <p>6s: ${matchStats.sixes || 0}</p>
                             </div>
                             <div class="stat-box">
                                 <h4>Bowling</h4>
@@ -1982,9 +2026,10 @@
                             </div>
                             <div class="stat-box">
                                 <h4>Score Breakdown</h4>
-                                <p>Base: ${(matchScore / (gotMultiplier ? 1.3 : 1)).toFixed(2)}</p>
-                                ${gotMultiplier ? `<p>Multiplier: ×1.3</p>` : ''}
-                                <p><strong>Final: ${matchScore.toFixed(2)}</strong></p>
+                                <p>Base: ${(matchScore / (gotMultiplier ? 1.3 : 1) / player.extra_mult).toFixed(1)}</p>
+                                ${gotMultiplier ? `<p>Match Multiplier: ×1.3</p>` : ''}
+                                ${player.extra_mult !== 1.0 ? `<p>Extra Multiplier: ×${player.extra_mult.toFixed(1)}</p>` : ''}
+                                <p><strong>Final: ${matchScore.toFixed(1)}</strong></p>
                             </div>
                         </div>
                     </div>
