@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cricket Player List</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+        }
+        #instructions {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        pre {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .code-block {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre;
+            font-family: monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #0056b3;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Cricket Player List</h1>
+    
+    <div id="instructions">
+        <h2>How to See All Players in the Leaderboard</h2>
+        <p>To see the full player list from the cricket dashboard:</p>
+        <ol>
+            <li>Open the cricket dashboard in your browser</li>
+            <li>Open the browser's developer console (Press F12 or Right-click → Inspect → Console)</li>
+            <li>Copy and paste the following code into the console, then press Enter:</li>
+        </ol>
+        
+        <div class="code-block">
+// Get all players and sort by score (descending), excluding players with 'Unknown' owner
+const players = Object.values(playerStats)
+  .filter(player => player.owner !== 'Unknown')
+  .sort((a, b) => b.score - a.score);
+
+// Create a table for display
+console.table(players.map((player, index) => ({
+  Rank: index + 1,
+  Name: player.player_name,
+  Owner: player.owner,
+  Runs: player.runs,
+  Wickets: player.wickets,
+  Catches: player.catches,
+  'Run Outs': player.run_outs,
+  Stumpings: player.stumpings || 0,
+  Score: player.score.toFixed(1)
+})));
+
+// Print simple list with just names
+console.log('=== PLAYER NAMES ONLY ===');
+players.forEach(player => console.log(player.player_name));
+        </div>
+    </div>
+    
+    <h2>Alternate Method: Export Player Data</h2>
+    <p>If you want to save the data for offline analysis, run this code to export the player data:</p>
+    
+    <div class="code-block">
+// Export all player data to JSON
+const exportData = JSON.stringify(
+  Object.values(playerStats)
+    .filter(player => player.owner !== 'Unknown')
+    .sort((a, b) => b.score - a.score), 
+  null, 2
+);
+
+// Create a download link
+const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(exportData);
+const downloadAnchor = document.createElement('a');
+downloadAnchor.setAttribute("href", dataStr);
+downloadAnchor.setAttribute("download", "cricket_players.json");
+document.body.appendChild(downloadAnchor);
+downloadAnchor.click();
+downloadAnchor.remove();
+    </div>
+    
+    <h2>Example Player Table Format</h2>
+    <table id="example-table">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>Owner</th>
+                <th>Score</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>1</td>
+                <td>Example Player 1</td>
+                <td>Team A</td>
+                <td>120.5</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>Example Player 2</td>
+                <td>Team B</td>
+                <td>115.3</td>
+            </tr>
+            <tr>
+                <td>3</td>
+                <td>Example Player 3</td>
+                <td>Team C</td>
+                <td>110.7</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <script>
+        // This script would auto-load player data if possible
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if we have access to playerStats (we won't from a separate HTML page)
+            // This is just a placeholder to show what would happen if we did
+            if (typeof playerStats !== 'undefined') {
+                const players = Object.values(playerStats)
+                    .filter(player => player.owner !== 'Unknown')
+                    .sort((a, b) => b.score - a.score);
+                
+                // Create a real table from the data
+                const tableBody = document.querySelector('#example-table tbody');
+                tableBody.innerHTML = '';  // Clear example data
+                
+                players.forEach((player, index) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${index + 1}</td>
+                        <td>${player.player_name}</td>
+                        <td>${player.owner}</td>
+                        <td>${player.score.toFixed(1)}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            }
+        });
+    </script>
+</body>
+</html> 
