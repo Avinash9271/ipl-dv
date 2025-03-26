@@ -1390,16 +1390,18 @@
             // Normalize player name for case-insensitive matching
             const normalizedName = playerName.trim().toLowerCase();
             
-            // Check if we've seen this player name before
+            // Check if we've seen this player name before - EXACT match only
             if (playerNameToId[normalizedName]) {
                 // We have this player already with a different ID
                 const existingId = playerNameToId[normalizedName];
                 
                 if (existingId !== playerId) {
-                    console.log(`Found duplicate player! ${playerName} has IDs: ${existingId} and ${playerId}`);
+                    const existingName = playerStats[existingId]?.player_name || "unknown";
+                    console.log(`Found duplicate player by exact name! "${playerName}" (${playerId}) matches existing "${existingName}" (${existingId})`);
                     
                     // If we have stats for this new ID, merge them into the existing player
                     if (playerStats[playerId]) {
+                        console.log(`Merging stats for: "${playerName}" -> "${existingName}"`);
                         mergePlayerStats(existingId, playerId);
                         // Delete the duplicate entry
                         delete playerStats[playerId];
@@ -1410,21 +1412,13 @@
                 return existingId;
             }
             
-            // Check for common name variations (e.g., "V Kohli" vs "Virat Kohli")
-            // This helps match players across different formats in the API
-            const matchedId = findPlayerByNameVariation(normalizedName);
-            if (matchedId) {
-                playerNameToId[normalizedName] = matchedId;
-                return matchedId;
-            }
-            
-            // Check for existing player in team mapping by ID
+            // Check for existing player in team mapping by ID only
             if (teamOwnerMapping[playerId]) {
                 playerNameToId[normalizedName] = playerId;
                 return playerId;
             }
             
-            // Check if player exists in team mapping by name
+            // Check if player exists in team mapping by EXACT name match
             let foundId = null;
             for (const [id, info] of Object.entries(teamOwnerMapping)) {
                 if (info.player_name.toLowerCase() === normalizedName) {
@@ -1434,10 +1428,13 @@
             }
             
             if (foundId) {
+                const mappedName = teamOwnerMapping[foundId]?.player_name || "unknown";
+                console.log(`Found in team mapping by exact name: "${playerName}" (${playerId}) -> "${mappedName}" (${foundId})`);
                 playerNameToId[normalizedName] = foundId;
                 
                 // If we have stats for the API ID, merge them into the CSV ID
                 if (playerStats[playerId] && playerId !== foundId) {
+                    console.log(`Merging stats for: "${playerName}" -> "${mappedName}" (mapping match)`);
                     mergePlayerStats(foundId, playerId);
                     // Delete the duplicate entry
                     delete playerStats[playerId];
@@ -1479,7 +1476,7 @@
                     matchStats: {},   // Track stats per match
                     multiplier_count: 0 // Track how many times player got 1.3x multiplier
                 };
-                console.log(`Added new player: ${playerName} (${playerId})`);
+                console.log(`Added new player: ${playerName} (${playerId}) - Owner: ${ownerInfo.owner}`);
             }
             
             // Register this player
@@ -1487,100 +1484,11 @@
             return playerId;
         }
         
-        // Helper function to find players by name variations
-        function findPlayerByNameVariation(normalizedName) {
-            // Common abbreviations and variations
-            // For example, "V Kohli" should match "Virat Kohli"
-            for (const [id, info] of Object.entries(teamOwnerMapping)) {
-                const fullName = info.player_name.toLowerCase();
-                
-                // Case 1: Full name in mapping matches part of the name from API
-                if (normalizedName.includes(fullName)) {
-                    return id;
-                }
-                
-                // Case 2: First initial + last name (e.g. "V Kohli" for "Virat Kohli")
-                const nameParts = fullName.split(' ');
-                if (nameParts.length >= 2) {
-                    const lastName = nameParts[nameParts.length - 1];
-                    const firstInitial = nameParts[0][0];
-                    
-                    // Check if the name matches pattern "F Lastname" (e.g. "V Kohli")
-                    const initialLastNamePattern = `${firstInitial} ${lastName}`;
-                    if (normalizedName === initialLastNamePattern) {
-                        return id;
-                    }
-                    
-                    // Check if last name matches and it's a unique last name
-                    if (normalizedName.includes(lastName) && lastName.length > 3) {
-                        // Check if this last name is unique enough
-                        let lastNameCount = 0;
-                        for (const otherInfo of Object.values(teamOwnerMapping)) {
-                            if (otherInfo.player_name.toLowerCase().includes(lastName)) {
-                                lastNameCount++;
-                            }
-                        }
-                        
-                        // If this last name is unique in our mapping, use it
-                        if (lastNameCount === 1) {
-                            return id;
-                        }
-                    }
-                }
-            }
-            
-            return null;
-        }
-        
-        // Function to merge stats from sourceId into targetId
-        function mergePlayerStats(targetId, sourceId) {
-            if (!playerStats[targetId] || !playerStats[sourceId]) return;
-            
-            console.log(`Merging player stats from ${sourceId} to ${targetId}`);
-            
-            const target = playerStats[targetId];
-            const source = playerStats[sourceId];
-            
-            // Merge numerical stats
-            target.runs += source.runs;
-            target.balls_faced += source.balls_faced;
-            target.wickets += source.wickets;
-            target.wicket_bowled += source.wicket_bowled || 0;
-            target.wicket_lbw += source.wicket_lbw || 0;
-            target.wicket_caught += source.wicket_caught || 0;
-            target.wicket_stumped += source.wicket_stumped || 0;
-            target.wicket_other += source.wicket_other || 0;
-            target.balls_bowled += source.balls_bowled;
-            target.catches += source.catches;
-            target.run_outs += source.run_outs;
-            target.runs_conceded += source.runs_conceded;
-            target.dot_balls += source.dot_balls;
-            target.good_ones += source.good_ones;
-            
-            // Update high score if needed
-            if (source.high_score > target.high_score) {
-                target.high_score = source.high_score;
-            }
-            
-            // Recalculate strike rate
-            if (target.balls_faced > 0) {
-                target.strike_rate = (target.runs / target.balls_faced) * 100;
-            }
-            
-            // Recalculate economy
-            if (target.balls_bowled >= 6) {
-                const overs = Math.floor(target.balls_bowled / 6) + (target.balls_bowled % 6) / 10;
-                target.economy = target.runs_conceded / overs;
-            }
-            
-            console.log(`Merged stats for ${target.player_name}`);
-        }
-        
         // Helper function to find owner info by player name
         function findOwnerByName(playerName) {
             if (!playerName) return { owner: "Unknown", team_id: "", extra_mult: 1.0 };
             
-            // Look for exact name matches first
+            // Look for exact name matches only
             for (const [playerId, info] of Object.entries(teamOwnerMapping)) {
                 if (info.player_name.toLowerCase() === playerName.toLowerCase()) {
                     console.log(`Found exact owner match for: ${playerName} -> ${info.owner}`);
@@ -1592,7 +1500,7 @@
                 }
             }
             
-            // No special cases - just return Unknown if no match found
+            // No match found
             return { owner: "Unknown", team_id: "", extra_mult: 1.0 };
         }
         
@@ -2162,6 +2070,85 @@
                 }
             }
         }
+
+        // Helper function to find players by name variations
+        function findPlayerByNameVariation(normalizedName) {
+            // We're now only doing exact matches, no variations
+            // This will return null in all cases, effectively disabling variation matching
+            return null;
+        }
+
+        // Function to merge stats from sourceId into targetId
+        function mergePlayerStats(targetId, sourceId) {
+            if (!playerStats[targetId] || !playerStats[sourceId]) return;
+            
+            console.log(`Merging player stats from ${sourceId} to ${targetId}`);
+            
+            const target = playerStats[targetId];
+            const source = playerStats[sourceId];
+            
+            // Merge numerical stats
+            target.runs += source.runs;
+            target.balls_faced += source.balls_faced;
+            target.wickets += source.wickets;
+            target.wicket_bowled += source.wicket_bowled || 0;
+            target.wicket_lbw += source.wicket_lbw || 0;
+            target.wicket_caught += source.wicket_caught || 0;
+            target.wicket_stumped += source.wicket_stumped || 0;
+            target.wicket_other += source.wicket_other || 0;
+            target.balls_bowled += source.balls_bowled;
+            target.catches += source.catches;
+            target.run_outs += source.run_outs;
+            target.runs_conceded += source.runs_conceded;
+            target.dot_balls += source.dot_balls;
+            target.good_ones += source.good_ones;
+            target.fours = (target.fours || 0) + (source.fours || 0);
+            target.sixes = (target.sixes || 0) + (source.sixes || 0);
+            
+            // Update high score if needed
+            if (source.high_score > target.high_score) {
+                target.high_score = source.high_score;
+            }
+            
+            // Recalculate strike rate
+            if (target.balls_faced > 0) {
+                target.strike_rate = (target.runs / target.balls_faced) * 100;
+            }
+            
+            // Recalculate economy
+            if (target.balls_bowled >= 6) {
+                const overs = Math.floor(target.balls_bowled / 6) + (target.balls_bowled % 6) / 10;
+                target.economy = target.runs_conceded / overs;
+            }
+            
+            // Merge match-specific data
+            for (const matchId in source.matchStats) {
+                if (!target.matchStats[matchId]) {
+                    target.matchStats[matchId] = {...source.matchStats[matchId]};
+                } else {
+                    // If both players have stats for this match, we should merge them
+                    console.log(`Both players have stats for match ${matchId}, merging carefully`);
+                }
+            }
+            
+            // Merge match scores
+            for (const matchId in source.matchScores) {
+                if (!target.matchScores[matchId]) {
+                    target.matchScores[matchId] = source.matchScores[matchId];
+                } else {
+                    // If both players have scores for this match, take the higher one
+                    target.matchScores[matchId] = Math.max(target.matchScores[matchId], source.matchScores[matchId]);
+                }
+            }
+            
+            // Add multiplier count
+            target.multiplier_count = (target.multiplier_count || 0) + (source.multiplier_count || 0);
+            
+            console.log(`Merged stats for ${target.player_name}`);
+        }
+
+        // Helper function to find owner info by player name
+        // ... existing code ...
     </script>
 </body>
 </html> 
