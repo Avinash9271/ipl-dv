@@ -235,7 +235,8 @@
 
     <script>
         // Constants
-        const API_KEY = "282bffef-9065-43b3-91f0-df54dec227fd";
+        // Base API key without the last 4 characters
+        const BASE_API_KEY = "9de714ba-d89b-40de-adae-2c3f544c";
         const IPL_2025_SERIES_ID = "d5a498c8-7596-4b93-8ab0-e0efc3345312";
         
         // Variables to store data
@@ -270,68 +271,42 @@
             return `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
         }
         
-        // Main function to fetch all required data
-        async function fetchData() {
-            try {
-                // Reset data
-                playerStats = {};
-                matchesProcessed = 0;
-                
-                // Step 1: Load team owner mapping from CSV
-                await fetchTeamOwnerMapping();
-                console.log("Team owner mapping loaded:", Object.keys(teamOwnerMapping).length, "players");
-                
-                // Initialize player stats with base values from team mapping
-                initializePlayerStats();
-                
-                // Step 2: Fetch all matches for the series
-                const matches = await fetchSeriesMatches(API_KEY, IPL_2025_SERIES_ID);
-                console.log("Fetched matches:", matches.length);
-                
-                // Step 3: Process each match to calculate player stats
-                if (matches && matches.length > 0) {
-                    const startedMatches = matches.filter(match => match.matchStarted);
-                    console.log(`Found ${startedMatches.length} started matches`);
-                    
-                    for (const match of startedMatches) {
-                        document.getElementById('loading').textContent = `Loading match details for ${match.name}...`;
-                        try {
-                            const matchDetails = await fetchMatchDetails(API_KEY, match.id);
-                            if (matchDetails && matchDetails.status === "success") {
-                                processMatchData(matchDetails);
-                                matchesProcessed++;
-                            }
-                        } catch (matchError) {
-                            console.error(`Error processing match ${match.id}:`, matchError);
-                        }
+        // Function to get the complete API key by reading the last 4 characters from URL query param
+        function getCompleteApiKey() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const keySuffix = urlParams.get('key') || ''; // Default to empty string if not provided
+            return BASE_API_KEY + keySuffix;
+        }
+        
+        // Main function to fetch all data and initialize the app
+        function fetchData() {
+            fetchMatches()
+                .then(matches => {
+                    if (matches.length === 0) {
+                        console.warn("No matches found or processed");
                     }
-                }
-                
-                // Step 4: Calculate and display player scores
-                // Set extra multipliers for some players before calculating scores
-                setExtraMultipliers();
-                calculatePlayerScores();
-                displayPlayerTable();
-                displayTeamDashboard();
-                
-                // Update the timestamp
-                const now = new Date();
-                document.getElementById('update-time').textContent = now.toLocaleString();
-                document.getElementById('loading').style.display = 'none';
-                
-                // Initialize with the team dashboard view
-                showTab('team-dashboard');
-                
-            } catch (error) {
-                console.error("Error fetching data:", error);
-                document.getElementById('error-container').innerHTML = `
-                    <div class="error">
-                        <h3>Error loading data</h3>
-                        <p>${error.message}</p>
-                    </div>
-                `;
-                document.getElementById('loading').style.display = 'none';
-            }
+                    return Promise.resolve();
+                })
+                .then(() => {
+                    document.getElementById('loading').style.display = 'none';
+                    console.log("All player stats:", playerStats);
+                    calculateAllScores();
+                    displayPlayerTable();
+                    displayTeamDashboard();
+                    showTab('team-dashboard'); // Default to team dashboard
+                })
+                .catch(error => {
+                    console.error("Error in data processing:", error);
+                    document.getElementById('loading').textContent = "Error loading data. Please check console for details.";
+                    
+                    // Check if this might be an API key issue
+                    const urlParams = new URLSearchParams(window.location.search);
+                    if (!urlParams.has('key')) {
+                        alert("API Key Error: You need to add the last 4 characters of the API key as a URL parameter. Example: ?key=477a");
+                    } else if (error.toString().includes("API") || error.toString().includes("auth")) {
+                        alert("API Key Error: The provided key suffix seems incorrect. Please check the 'key' parameter in the URL.");
+                    }
+                });
         }
         
         // Function to fetch team-owner mapping from CSV
@@ -456,11 +431,86 @@
             console.log("Initialized player stats for", Object.keys(playerStats).length, "players");
         }
         
+        // Function to fetch matches and load all required data
+        async function fetchMatches() {
+            try {
+                // Reset data
+                playerStats = {};
+                matchesProcessed = 0;
+                
+                document.getElementById('loading').textContent = "Loading team data...";
+                
+                // Step 1: Load team owner mapping from CSV
+                await fetchTeamOwnerMapping();
+                console.log("Team owner mapping loaded:", Object.keys(teamOwnerMapping).length, "players");
+                
+                // Initialize player stats with base values from team mapping
+                initializePlayerStats();
+                
+                document.getElementById('loading').textContent = "Loading matches...";
+                
+                // Step 2: Fetch all matches for the series
+                console.log(`Fetching matches for series: ${IPL_2025_SERIES_ID}`);
+                const matches = await fetchSeriesMatches(IPL_2025_SERIES_ID);
+                console.log("Fetched matches:", matches.length);
+                
+                // Step 3: Fetch each match's scorecard
+                const validMatches = [];
+                for (const match of matches) {
+                    if (match.status !== "Match not started") {
+                        document.getElementById('loading').textContent = `Loading match details for ${match.name}...`;
+                        try {
+                            const matchDetails = await fetchMatchDetails(match.id);
+                            if (matchDetails && matchDetails.status === "success") {
+                                processMatchData(matchDetails);
+                                validMatches.push(match);
+                                matchesProcessed++;
+                            } else {
+                                console.warn(`Couldn't fetch valid scorecard for ${match.name}`);
+                            }
+                        } catch (error) {
+                            console.error(`Error processing match ${match.name}:`, error);
+                        }
+                    } else {
+                        console.log(`Skipping match ${match.name}, not started yet`);
+                    }
+                }
+                
+                // Step 4: Set extra multipliers and calculate scores
+                setExtraMultipliers();
+                
+                // Update the timestamp
+                const now = new Date();
+                document.getElementById('update-time').textContent = now.toLocaleString();
+                
+                return validMatches;
+                
+            } catch (error) {
+                console.error("Error fetching matches:", error);
+                // Check if this might be an API key issue
+                const urlParams = new URLSearchParams(window.location.search);
+                if (!urlParams.has('key')) {
+                    alert("API Key Error: You need to add the last 4 characters of the API key as a URL parameter. Example: ?key=477a");
+                } else if (error.toString().includes("API") || error.toString().includes("auth")) {
+                    alert("API Key Error: The provided key suffix seems incorrect. Please check the 'key' parameter in the URL.");
+                }
+                document.getElementById('error-container').innerHTML = `
+                    <div class="error">
+                        <h3>Error loading data</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+                return [];
+            }
+        }
+        
         // Function to fetch series matches
-        async function fetchSeriesMatches(apiKey, seriesId) {
+        async function fetchSeriesMatches(seriesId) {
             try {
                 console.log(`Fetching matches for series: ${seriesId}`);
-                const url = addTimestamp(`https://api.cricapi.com/v1/series_info?apikey=${apiKey}&id=${seriesId}`);
+                // Get complete API key from base + URL query param
+                const completeApiKey = getCompleteApiKey();
+                const url = addTimestamp(`https://api.cricapi.com/v1/series_info?apikey=${completeApiKey}&id=${seriesId}`);
                 
                 const response = await fetch(url, {
                     method: 'GET',
@@ -487,10 +537,12 @@
         }
         
         // Function to fetch match details
-        async function fetchMatchDetails(apiKey, matchId) {
+        async function fetchMatchDetails(matchId) {
             try {
                 console.log(`Fetching scorecard for match: ${matchId}`);
-                const url = addTimestamp(`https://api.cricapi.com/v1/match_scorecard?apikey=${apiKey}&id=${matchId}`);
+                // Get complete API key from base + URL query param
+                const completeApiKey = getCompleteApiKey();
+                const url = addTimestamp(`https://api.cricapi.com/v1/match_scorecard?apikey=${completeApiKey}&id=${matchId}`);
                 
                 const response = await fetch(url, {
                     method: 'GET',
@@ -1191,60 +1243,42 @@
             return { owner: "Unknown", team_id: "", extra_mult: 1.0 };
         }
         
-        // Calculate player scores using the provided score function
-        function calculatePlayerScores() {
-            console.log("Calculating player scores on a per-match basis");
-            
+        // Calculate scores for all players
+        function calculateAllScores() {
+            console.log("Calculating all player scores...");
+            // Calculate each player's score
             for (const playerId in playerStats) {
                 const player = playerStats[playerId];
                 
-                // Reset the player's total score
+                // Reset score
                 player.score = 0;
-                player.multiplier_count = 0;
                 
-                // Track which matches received multipliers
-                const multipliedMatches = [];
-                
-                // Calculate score for each match separately, then sum up
-                if (player.matchStats) {
-                    for (const matchId in player.matchStats) {
-                        const matchStats = player.matchStats[matchId];
+                // Calculate score for each match and sum
+                for (const matchId in player.matchStats) {
+                    const matchStats = player.matchStats[matchId];
+                    
+                    // Calculate base score for this match
+                    const matchScore = calculateMatchScore(matchStats);
+                    
+                    // Apply 1.3x multiplier if this player was the highest scorer in the match
+                    let finalMatchScore = matchScore;
+                    if (matchStats.is_highest_scorer) {
+                        finalMatchScore = matchScore * 1.3;
                         
-                        // Calculate score for this match using the formula
-                        let matchScore = calculateMatchScore(matchStats);
-                        
-                        // Apply multiplier if this player was the highest scorer in this match
-                        if (matchHighestScorers[matchId] && matchHighestScorers[matchId].playerId === playerId) {
-                            matchScore = matchScore * 1.3;
-                            multipliedMatches.push(matchId);
-                            player.multiplier_count += 1;
-                            console.log(`Applied 1.3x multiplier to ${player.player_name}'s score of ${(matchScore/1.3).toFixed(2)} → ${matchScore.toFixed(2)} in match ${matchId}`);
-                        }
-                        
-                        // Add this match's score to the player's total
-                        player.score += matchScore;
-                        
-                        // Store the calculated match score
-                        player.matchScores[matchId] = matchScore;
+                        // Count this multiplier for display
+                        player.multiplier_count = (player.multiplier_count || 0) + 1;
                     }
+                    
+                    // Apply the extra multiplier (from teams.csv)
+                    finalMatchScore = finalMatchScore * player.extra_mult;
+                    
+                    // Add this match's score to total
+                    player.score += finalMatchScore;
                 }
                 
-                // Apply extra multiplier to final score (if any)
-                const baseScore = player.score;
-                if (player.extra_mult && player.extra_mult !== 1.0) {
-                    player.score = player.score * player.extra_mult;
-                    console.log(`Applied extra ${player.extra_mult}x multiplier to ${player.player_name}'s total score: ${baseScore.toFixed(2)} → ${player.score.toFixed(2)}`);
-                }
-                
-                // Round the final score
-                player.score = Math.round(player.score);
-                player.multipliedMatches = multipliedMatches;
-                
-                // Log the final score
-                console.log(`${player.player_name} final score: ${player.score} (with multiplier on ${multipliedMatches.length} matches)`);
+                // Round to 2 decimal places
+                player.score = Math.round(player.score * 100) / 100;
             }
-            
-            console.log("Finished calculating scores for all players");
         }
         
         // Function to calculate a player's score for a single match
@@ -1269,14 +1303,13 @@
             }
             
             // Fielding score (catches, stumpings, and run-outs)
-            // We need to add the fielding points back here since we're no longer adding them directly in the processing
             const stumpings = stats.stumpings || 0;
             const fielding_score = (stats.catches + stats.run_outs + stumpings) * 10;
             
             // Final score for this match
             return batsman_score + bowlers_score + fielding_score + 4;
         }
-        
+
         // Function to display player table
         function displayPlayerTable() {
             console.log("Displaying player table");
@@ -1696,6 +1729,22 @@
             // We don't need to set any multipliers manually now
             // They are loaded from the CSV file
         }
+
+        // Check for key parameter on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (!urlParams.has('key')) {
+                console.warn("No 'key' parameter found in URL. The API calls may fail.");
+                document.getElementById('main-container').innerHTML = `
+                    <div style="text-align:center; padding:30px; background-color:#fff3cd; border-radius:5px; margin:20px auto; max-width:600px;">
+                        <h3>⚠️ Missing API Key Suffix</h3>
+                        <p>You need to add the last 4 characters of the API key as a URL parameter.</p>
+                        <p>Example: <code>?key=477a</code></p>
+                        <p>Please add the parameter to the URL and reload the page.</p>
+                    </div>
+                `;
+            }
+        });
     </script>
 </body>
 </html> 
