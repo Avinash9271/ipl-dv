@@ -63,7 +63,62 @@
             font-size: 16px;
             margin: 5px;
         }
-        .refresh-btn:hover, .nav-btn:hover {
+        .refresh-btn {
+            background-color: #28a745;
+            position: relative;
+            padding-left: 35px;
+            transition: background-color 0.3s;
+        }
+        .refresh-btn:hover {
+            background-color: #218838;
+        }
+        .refresh-btn:before {
+            content: "↻";
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 18px;
+        }
+        .refresh-btn.loading {
+            background-color: #6c757d;
+            cursor: wait;
+        }
+        .refresh-btn.loading:before {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: translateY(-50%) rotate(0deg); }
+            to { transform: translateY(-50%) rotate(360deg); }
+        }
+        .refresh-btn-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 10px 0 20px;
+        }
+        .refresh-info {
+            font-size: 13px;
+            color: #666;
+            margin-left: 15px;
+            max-width: 400px;
+        }
+        .clear-cache-btn {
+            background-color: transparent;
+            color: #dc3545;
+            border: 1px solid #dc3545;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-left: 10px;
+            transition: all 0.2s;
+        }
+        .clear-cache-btn:hover {
+            background-color: #dc3545;
+            color: white;
+        }
+        .nav-btn:hover {
             background-color: #003d7a;
         }
         .button-container {
@@ -75,6 +130,21 @@
             text-align: center;
             margin-bottom: 20px;
             color: #666;
+        }
+        .cache-status {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+        .cache-status.active {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .cache-status.inactive {
+            background-color: #f8d7da;
+            color: #721c24;
         }
         .view-controls {
             display: flex;
@@ -206,7 +276,15 @@
 <body>
     <div class="container">
         <h1>Cricket Player Dashboard</h1>
-        <div class="stats-info">Last updated: <span id="update-time"></span></div>
+        <div class="stats-info">
+            Last updated: <span id="update-time"></span>
+            <span id="cache-status" class="cache-status">Cache status: Checking...</span>
+        </div>
+        <div class="refresh-btn-container">
+            <button id="refresh-button" class="refresh-btn" onclick="refreshData()" title="Only refreshes the latest match, previous matches are cached">Refresh Latest Match</button>
+            <div class="refresh-info">Only the latest match is refreshed to save data. Previous matches are cached locally.</div>
+            <button id="clear-cache-btn" class="clear-cache-btn" onclick="clearCache()" title="Clear all cached match data and fetch everything again">Clear Cache</button>
+        </div>
         <div id="loading">Loading player data...</div>
         <div id="error-container"></div>
         
@@ -227,16 +305,11 @@
             </div>
             <div id="player-matches-container"></div>
         </div>
-        
-        <div class="button-container">
-            <button class="refresh-btn" onclick="refreshData()">Refresh Data</button>
-        </div>
     </div>
 
     <script>
         // Constants
-        // Base API key without the last 4 characters
-        const BASE_API_KEY = "9de714ba-d89b-40de-adae-2c3f544c";
+        // NO hardcoded API key - it will be fully read from the URL parameter
         const IPL_2025_SERIES_ID = "d5a498c8-7596-4b93-8ab0-e0efc3345312";
         
         // Variables to store data
@@ -245,6 +318,8 @@
         let matchesProcessed = 0;
         let playerNameToId = {}; // Track players by name to prevent duplicates
         let matchHighestScorers = {}; // Track highest scorer for each match
+        let cachedMatchData = {}; // Cache for match data
+        let lastMatchId = null; // To keep track of the latest match
         
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -253,17 +328,119 @@
             console.log("team-dashboard exists:", !!document.getElementById('team-dashboard'));
             console.log("player-matches exists:", !!document.getElementById('player-matches'));
             
-            fetchData();
-            // Auto-refresh every 5 minutes
-            setInterval(fetchData, 5 * 60 * 1000);
+            // Check if we have cached data in localStorage
+            loadCachedData();
+            
+            fetchData(false); // Initial fetch with full load
+            // Auto-refresh every 5 minutes - only get latest match
+            setInterval(() => fetchData(true), 5 * 60 * 1000);
         });
+        
+        // Function to save data to localStorage
+        function saveCachedData() {
+            try {
+                // Create a metadata object
+                const metadata = {
+                    timestamp: new Date().toISOString(),
+                    matchCount: Object.keys(cachedMatchData).length,
+                    lastMatchId: lastMatchId,
+                    version: '1.0' // Add version in case we change the cache format later
+                };
+                
+                // Only cache match data, not player stats which are recalculated
+                localStorage.setItem('cachedMatchData', JSON.stringify(cachedMatchData));
+                localStorage.setItem('cacheMetadata', JSON.stringify(metadata));
+                
+                // Update cache status indicator
+                updateCacheStatus(true, metadata);
+                
+                console.log(`Cached ${metadata.matchCount} matches to localStorage with timestamp ${metadata.timestamp}`);
+            } catch (error) {
+                console.warn("Failed to cache data to localStorage:", error);
+                updateCacheStatus(false);
+            }
+        }
+        
+        // Function to load data from localStorage
+        function loadCachedData() {
+            try {
+                const savedMatchData = localStorage.getItem('cachedMatchData');
+                const savedMetadata = localStorage.getItem('cacheMetadata');
+                
+                if (savedMatchData && savedMetadata) {
+                    cachedMatchData = JSON.parse(savedMatchData);
+                    const metadata = JSON.parse(savedMetadata);
+                    lastMatchId = metadata.lastMatchId;
+                    
+                    // Update cache status indicator
+                    updateCacheStatus(true, metadata);
+                    
+                    console.log(`Loaded ${Object.keys(cachedMatchData).length} cached matches from localStorage`);
+                    console.log(`Cache timestamp: ${metadata.timestamp}`);
+                    
+                    const lastUpdate = new Date(metadata.timestamp);
+                    const timeDiff = Math.floor((new Date() - lastUpdate) / (1000 * 60)); // Minutes
+                    console.log(`Last update was ${timeDiff} minutes ago`);
+                    
+                    return true;
+                } else {
+                    updateCacheStatus(false);
+                    return false;
+                }
+            } catch (error) {
+                console.warn("Failed to load cached data:", error);
+                updateCacheStatus(false);
+                return false;
+            }
+        }
+        
+        // Function to update cache status indicator
+        function updateCacheStatus(isActive, metadata = null) {
+            const statusElement = document.getElementById('cache-status');
+            if (isActive && metadata) {
+                const lastUpdate = new Date(metadata.timestamp);
+                const timeDiff = Math.floor((new Date() - lastUpdate) / (1000 * 60)); // Minutes
+                let timeUnit = 'minutes';
+                let time = timeDiff;
+                
+                if (timeDiff >= 60) {
+                    time = Math.floor(timeDiff / 60);
+                    timeUnit = time === 1 ? 'hour' : 'hours';
+                    
+                    if (time >= 24) {
+                        time = Math.floor(time / 24);
+                        timeUnit = time === 1 ? 'day' : 'days';
+                    }
+                } else if (timeDiff < 1) {
+                    time = 'less than 1';
+                    timeUnit = 'minute';
+                }
+                
+                statusElement.textContent = `Cache: ${metadata.matchCount} matches (${time} ${timeUnit} ago)`;
+                statusElement.className = 'cache-status active';
+            } else {
+                statusElement.textContent = 'Cache: Inactive';
+                statusElement.className = 'cache-status inactive';
+            }
+        }
         
         // Function to refresh data manually
         function refreshData() {
+            const refreshButton = document.getElementById('refresh-button');
+            refreshButton.classList.add('loading');
+            refreshButton.disabled = true;
+            refreshButton.textContent = 'Refreshing...';
+            
             document.getElementById('loading').style.display = 'block';
-            document.getElementById('player-table-container').innerHTML = '';
+            document.getElementById('loading').textContent = 'Refreshing latest match data...';
             document.getElementById('error-container').innerHTML = '';
-            fetchData();
+            
+            fetchData(true) // true = only refresh latest match
+                .finally(() => {
+                    refreshButton.classList.remove('loading');
+                    refreshButton.disabled = false;
+                    refreshButton.textContent = 'Refresh Latest Match';
+                });
         }
         
         // Add timestamp to prevent caching
@@ -271,42 +448,56 @@
             return `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
         }
         
-        // Function to get the complete API key by reading the last 4 characters from URL query param
-        function getCompleteApiKey() {
+        // Function to get the API key from URL query param
+        function getApiKey() {
             const urlParams = new URLSearchParams(window.location.search);
-            const keySuffix = urlParams.get('key') || ''; // Default to empty string if not provided
-            return BASE_API_KEY + keySuffix;
+            return urlParams.get('key') || ''; // Get the full API key from the URL parameter
         }
         
         // Main function to fetch all data and initialize the app
-        function fetchData() {
-            fetchMatches()
-                .then(matches => {
-                    if (matches.length === 0) {
-                        console.warn("No matches found or processed");
-                    }
-                    return Promise.resolve();
-                })
-                .then(() => {
-                    document.getElementById('loading').style.display = 'none';
-                    console.log("All player stats:", playerStats);
-                    calculateAllScores();
-                    displayPlayerTable();
-                    displayTeamDashboard();
-                    showTab('team-dashboard'); // Default to team dashboard
-                })
-                .catch(error => {
-                    console.error("Error in data processing:", error);
-                    document.getElementById('loading').textContent = "Error loading data. Please check console for details.";
-                    
-                    // Check if this might be an API key issue
-                    const urlParams = new URLSearchParams(window.location.search);
-                    if (!urlParams.has('key')) {
-                        alert("API Key Error: You need to add the last 4 characters of the API key as a URL parameter. Example: ?key=477a");
-                    } else if (error.toString().includes("API") || error.toString().includes("auth")) {
-                        alert("API Key Error: The provided key suffix seems incorrect. Please check the 'key' parameter in the URL.");
-                    }
-                });
+        function fetchData(onlyLatestMatch = false) {
+            // Return a promise so we can handle completion in the refresh function
+            return new Promise((resolve, reject) => {
+                // Check for API key before making any requests
+                const apiKey = getApiKey();
+                if (!apiKey) {
+                    const error = new Error("Missing API key. Please add ?key=your-api-key to the URL.");
+                    console.error(error);
+                    document.getElementById('loading').textContent = "Error: Missing API key";
+                    reject(error);
+                    return;
+                }
+                
+                fetchMatches(onlyLatestMatch)
+                    .then(matches => {
+                        if (matches.length === 0 && !onlyLatestMatch) {
+                            console.warn("No matches found or processed");
+                        }
+                        return Promise.resolve();
+                    })
+                    .then(() => {
+                        document.getElementById('loading').style.display = 'none';
+                        console.log("All player stats:", playerStats);
+                        calculateAllScores();
+                        displayPlayerTable();
+                        displayTeamDashboard();
+                        showTab('team-dashboard'); // Default to team dashboard
+                        resolve(); // Resolve the promise when everything is done
+                    })
+                    .catch(error => {
+                        console.error("Error in data processing:", error);
+                        document.getElementById('loading').textContent = "Error loading data. Please check console for details.";
+                        
+                        // Check if this might be an API key issue
+                        const urlParams = new URLSearchParams(window.location.search);
+                        if (!urlParams.has('key') || urlParams.get('key').trim() === '') {
+                            alert("API Key Error: You need to add your API key as a URL parameter. Example: ?key=your-api-key");
+                        } else if (error.toString().includes("API") || error.toString().includes("auth")) {
+                            alert("API Key Error: The provided key seems incorrect. Please check the 'key' parameter in the URL.");
+                        }
+                        reject(error); // Reject the promise on error
+                    });
+            });
         }
         
         // Function to fetch team-owner mapping from CSV
@@ -432,59 +623,160 @@
         }
         
         // Function to fetch matches and load all required data
-        async function fetchMatches() {
+        async function fetchMatches(onlyLatestMatch = false) {
             try {
-                // Reset data
-                playerStats = {};
-                matchesProcessed = 0;
-                
-                document.getElementById('loading').textContent = "Loading team data...";
-                
-                // Step 1: Load team owner mapping from CSV
-                await fetchTeamOwnerMapping();
-                console.log("Team owner mapping loaded:", Object.keys(teamOwnerMapping).length, "players");
-                
-                // Initialize player stats with base values from team mapping
-                initializePlayerStats();
-                
-                document.getElementById('loading').textContent = "Loading matches...";
-                
-                // Step 2: Fetch all matches for the series
-                console.log(`Fetching matches for series: ${IPL_2025_SERIES_ID}`);
-                const matches = await fetchSeriesMatches(IPL_2025_SERIES_ID);
-                console.log("Fetched matches:", matches.length);
-                
-                // Step 3: Fetch each match's scorecard
-                const validMatches = [];
-                for (const match of matches) {
-                    if (match.status !== "Match not started") {
-                        document.getElementById('loading').textContent = `Loading match details for ${match.name}...`;
-                        try {
-                            const matchDetails = await fetchMatchDetails(match.id);
-                            if (matchDetails && matchDetails.status === "success") {
-                                processMatchData(matchDetails);
-                                validMatches.push(match);
-                                matchesProcessed++;
-                            } else {
-                                console.warn(`Couldn't fetch valid scorecard for ${match.name}`);
-                            }
-                        } catch (error) {
-                            console.error(`Error processing match ${match.name}:`, error);
-                        }
-                    } else {
-                        console.log(`Skipping match ${match.name}, not started yet`);
-                    }
+                // Check for API key before making any requests
+                const apiKey = getApiKey();
+                if (!apiKey) {
+                    throw new Error("Missing API key. Please add ?key=your-api-key to the URL.");
                 }
                 
-                // Step 4: Set extra multipliers and calculate scores
-                setExtraMultipliers();
-                
-                // Update the timestamp
-                const now = new Date();
-                document.getElementById('update-time').textContent = now.toLocaleString();
-                
-                return validMatches;
-                
+                // If only refreshing latest match and we have cached data, use a different approach
+                if (onlyLatestMatch && Object.keys(cachedMatchData).length > 0) {
+                    console.log("Refreshing only the latest match");
+                    
+                    document.getElementById('loading').textContent = "Loading team data...";
+                    
+                    // Load team owner mapping if not already loaded
+                    if (Object.keys(teamOwnerMapping).length === 0) {
+                        await fetchTeamOwnerMapping();
+                        initializePlayerStats();
+                    }
+                    
+                    document.getElementById('loading').textContent = "Finding latest match...";
+                    
+                    // Get all matches for the series to identify the latest one
+                    const allMatches = await fetchSeriesMatches(IPL_2025_SERIES_ID);
+                    console.log("Fetched all matches for latest status:", allMatches.length);
+                    
+                    // Filter to only consider matches that have started
+                    const startedMatches = allMatches.filter(match => match.status !== "Match not started");
+                    if (startedMatches.length === 0) {
+                        console.log("No started matches found");
+                        return [];
+                    }
+                    
+                    // Sort matches by date (assuming the API returns them in a consistent order)
+                    // If not, we might need a more robust approach with actual date parsing
+                    startedMatches.sort((a, b) => {
+                        // Use the date if available, otherwise use the ID as a fallback
+                        return new Date(b.date || 0) - new Date(a.date || 0) || b.id.localeCompare(a.id);
+                    });
+                    
+                    // Get the latest match
+                    const latestMatch = startedMatches[0];
+                    lastMatchId = latestMatch.id;
+                    console.log(`Latest match identified: ${latestMatch.name} (${latestMatch.id})`);
+                    
+                    // Reset player stats but maintain the cache
+                    playerStats = {};
+                    initializePlayerStats();
+                    
+                    // First, process all cached matches except the latest
+                    for (const matchId in cachedMatchData) {
+                        if (matchId !== latestMatch.id) {
+                            const matchData = cachedMatchData[matchId];
+                            console.log(`Processing cached match: ${matchId}`);
+                            processMatchData(matchData);
+                            matchesProcessed++;
+                        }
+                    }
+                    
+                    // Then fetch and process only the latest match
+                    document.getElementById('loading').textContent = `Refreshing latest match: ${latestMatch.name}...`;
+                    const latestMatchData = await fetchMatchDetails(latestMatch.id);
+                    
+                    if (latestMatchData && latestMatchData.status === "success") {
+                        // Update the cache with latest data
+                        cachedMatchData[latestMatch.id] = latestMatchData;
+                        saveCachedData();
+                        
+                        console.log(`Processing latest match: ${latestMatch.name}`);
+                        processMatchData(latestMatchData);
+                        matchesProcessed++;
+                    } else {
+                        console.warn(`Couldn't fetch valid scorecard for latest match: ${latestMatch.name}`);
+                    }
+                    
+                    // Set extra multipliers and update timestamp
+                    setExtraMultipliers();
+                    const now = new Date();
+                    document.getElementById('update-time').textContent = now.toLocaleString();
+                    
+                    return [latestMatch];
+                } else {
+                    // Full refresh logic (original code)
+                    // Reset data
+                    playerStats = {};
+                    matchesProcessed = 0;
+                    cachedMatchData = {}; // Clear cache for full refresh
+                    
+                    document.getElementById('loading').textContent = "Loading team data...";
+                    
+                    // Step 1: Load team owner mapping from CSV
+                    await fetchTeamOwnerMapping();
+                    console.log("Team owner mapping loaded:", Object.keys(teamOwnerMapping).length, "players");
+                    
+                    // Initialize player stats with base values from team mapping
+                    initializePlayerStats();
+                    
+                    document.getElementById('loading').textContent = "Loading matches...";
+                    
+                    // Step 2: Fetch all matches for the series
+                    console.log(`Fetching matches for series: ${IPL_2025_SERIES_ID}`);
+                    const matches = await fetchSeriesMatches(IPL_2025_SERIES_ID);
+                    console.log("Fetched matches:", matches.length);
+                    
+                    // Sort matches to ensure consistent processing order
+                    matches.sort((a, b) => {
+                        return new Date(a.date || 0) - new Date(b.date || 0) || a.id.localeCompare(b.id);
+                    });
+                    
+                    // Keep track of the latest match
+                    if (matches.length > 0) {
+                        const startedMatches = matches.filter(match => match.status !== "Match not started");
+                        if (startedMatches.length > 0) {
+                            lastMatchId = startedMatches[startedMatches.length - 1].id;
+                        }
+                    }
+                    
+                    // Step 3: Fetch each match's scorecard
+                    const validMatches = [];
+                    for (const match of matches) {
+                        if (match.status !== "Match not started") {
+                            document.getElementById('loading').textContent = `Loading match details for ${match.name}...`;
+                            try {
+                                const matchDetails = await fetchMatchDetails(match.id);
+                                if (matchDetails && matchDetails.status === "success") {
+                                    // Cache the match data
+                                    cachedMatchData[match.id] = matchDetails;
+                                    
+                                    processMatchData(matchDetails);
+                                    validMatches.push(match);
+                                    matchesProcessed++;
+                                } else {
+                                    console.warn(`Couldn't fetch valid scorecard for ${match.name}`);
+                                }
+                            } catch (error) {
+                                console.error(`Error processing match ${match.name}:`, error);
+                            }
+                        } else {
+                            console.log(`Skipping match ${match.name}, not started yet`);
+                        }
+                    }
+                    
+                    // Save all match data to cache
+                    saveCachedData();
+                    
+                    // Step 4: Set extra multipliers and calculate scores
+                    setExtraMultipliers();
+                    
+                    // Update the timestamp
+                    const now = new Date();
+                    document.getElementById('update-time').textContent = now.toLocaleString();
+                    
+                    return validMatches;
+                }
             } catch (error) {
                 console.error("Error fetching matches:", error);
                 // Check if this might be an API key issue
@@ -508,9 +800,9 @@
         async function fetchSeriesMatches(seriesId) {
             try {
                 console.log(`Fetching matches for series: ${seriesId}`);
-                // Get complete API key from base + URL query param
-                const completeApiKey = getCompleteApiKey();
-                const url = addTimestamp(`https://api.cricapi.com/v1/series_info?apikey=${completeApiKey}&id=${seriesId}`);
+                // Get API key from URL parameter
+                const apiKey = getApiKey();
+                const url = addTimestamp(`https://api.cricapi.com/v1/series_info?apikey=${apiKey}&id=${seriesId}`);
                 
                 const response = await fetch(url, {
                     method: 'GET',
@@ -540,9 +832,9 @@
         async function fetchMatchDetails(matchId) {
             try {
                 console.log(`Fetching scorecard for match: ${matchId}`);
-                // Get complete API key from base + URL query param
-                const completeApiKey = getCompleteApiKey();
-                const url = addTimestamp(`https://api.cricapi.com/v1/match_scorecard?apikey=${completeApiKey}&id=${matchId}`);
+                // Get API key from URL parameter
+                const apiKey = getApiKey();
+                const url = addTimestamp(`https://api.cricapi.com/v1/match_scorecard?apikey=${apiKey}&id=${matchId}`);
                 
                 const response = await fetch(url, {
                     method: 'GET',
@@ -629,6 +921,12 @@
                     score: highestScore,
                     playerName: playerStats[highestScorerId]?.player_name || "Unknown Player"
                 };
+                
+                // Mark the player as having the highest score for this match
+                if (playerStats[highestScorerId] && playerStats[highestScorerId].matchStats && playerStats[highestScorerId].matchStats[matchId]) {
+                    playerStats[highestScorerId].matchStats[matchId].is_highest_scorer = true;
+                }
+                
                 console.log(`Highest scorer for match ${matchId}: ${matchHighestScorers[matchId].playerName} with ${highestScore} points`);
             }
         }
@@ -1252,6 +1550,7 @@
                 
                 // Reset score
                 player.score = 0;
+                player.multiplier_count = 0;
                 
                 // Calculate score for each match and sum
                 for (const matchId in player.matchStats) {
@@ -1266,7 +1565,9 @@
                         finalMatchScore = matchScore * 1.3;
                         
                         // Count this multiplier for display
-                        player.multiplier_count = (player.multiplier_count || 0) + 1;
+                        player.multiplier_count += 1;
+                        
+                        console.log(`Applied 1.3x multiplier for ${player.player_name} in match ${matchId}`);
                     }
                     
                     // Apply the extra multiplier (from teams.csv)
@@ -1733,18 +2034,58 @@
         // Check for key parameter on page load
         window.addEventListener('DOMContentLoaded', function() {
             const urlParams = new URLSearchParams(window.location.search);
-            if (!urlParams.has('key')) {
-                console.warn("No 'key' parameter found in URL. The API calls may fail.");
-                document.getElementById('main-container').innerHTML = `
+            if (!urlParams.has('key') || urlParams.get('key').trim() === '') {
+                console.warn("No 'key' parameter found in URL. The API calls will fail.");
+                document.querySelector('.container').innerHTML = `
                     <div style="text-align:center; padding:30px; background-color:#fff3cd; border-radius:5px; margin:20px auto; max-width:600px;">
-                        <h3>⚠️ Missing API Key Suffix</h3>
-                        <p>You need to add the last 4 characters of the API key as a URL parameter.</p>
-                        <p>Example: <code>?key=477a</code></p>
+                        <h3>⚠️ Missing API Key</h3>
+                        <p>You need to add your CricAPI key as a URL parameter.</p>
+                        <p>Example: <code>?key=your-cricapi-key-here</code></p>
                         <p>Please add the parameter to the URL and reload the page.</p>
+                        <p style="margin-top: 15px; font-size: 14px; color: #856404;">Note: You can get an API key from <a href="https://cricapi.com/" target="_blank">cricapi.com</a></p>
                     </div>
                 `;
             }
         });
+
+        // Function to clear the cache and perform a full refresh
+        function clearCache() {
+            if (confirm('Are you sure you want to clear the cache? This will delete all stored match data and perform a full refresh.')) {
+                try {
+                    // Clear the localStorage items
+                    localStorage.removeItem('cachedMatchData');
+                    localStorage.removeItem('cacheMetadata');
+                    
+                    // Reset in-memory cache
+                    cachedMatchData = {};
+                    lastMatchId = null;
+                    
+                    // Update cache status
+                    updateCacheStatus(false);
+                    
+                    // Show a message
+                    document.getElementById('loading').style.display = 'block';
+                    document.getElementById('loading').textContent = 'Cache cleared! Performing full refresh...';
+                    
+                    // Perform a full refresh
+                    const refreshButton = document.getElementById('refresh-button');
+                    refreshButton.classList.add('loading');
+                    refreshButton.disabled = true;
+                    
+                    // Full refresh (false means don't use cache)
+                    fetchData(false).finally(() => {
+                        refreshButton.classList.remove('loading');
+                        refreshButton.disabled = false;
+                        refreshButton.textContent = 'Refresh Latest Match';
+                    });
+                    
+                    console.log('Cache cleared successfully');
+                } catch (error) {
+                    console.error('Error clearing cache:', error);
+                    alert('An error occurred while clearing the cache. Please try again.');
+                }
+            }
+        }
     </script>
 </body>
 </html> 
