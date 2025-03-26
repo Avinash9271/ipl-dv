@@ -683,6 +683,15 @@
                         }
                     }
                     
+                    // Log fielding stats after processing cached matches to verify
+                    console.log("Fielding stats after processing cached matches:");
+                    for (const playerId in playerStats) {
+                        const player = playerStats[playerId];
+                        if (player.catches > 0 || player.stumpings > 0 || player.run_outs > 0) {
+                            console.log(`${player.player_name}: ${player.catches} catches, ${player.stumpings || 0} stumpings, ${player.run_outs} run-outs`);
+                        }
+                    }
+                    
                     // Then fetch and process only the latest match
                     document.getElementById('loading').textContent = `Refreshing latest match: ${latestMatch.name}...`;
                     const latestMatchData = await fetchMatchDetails(latestMatch.id);
@@ -695,6 +704,15 @@
                         console.log(`Processing latest match: ${latestMatch.name}`);
                         processMatchData(latestMatchData);
                         matchesProcessed++;
+                        
+                        // Log fielding stats after processing latest match to verify changes
+                        console.log("Fielding stats after processing latest match:");
+                        for (const playerId in playerStats) {
+                            const player = playerStats[playerId];
+                            if (player.catches > 0 || player.stumpings > 0 || player.run_outs > 0) {
+                                console.log(`${player.player_name}: ${player.catches} catches, ${player.stumpings || 0} stumpings, ${player.run_outs} run-outs`);
+                            }
+                        }
                     } else {
                         console.warn(`Couldn't fetch valid scorecard for latest match: ${latestMatch.name}`);
                     }
@@ -763,6 +781,15 @@
                             }
                         } else {
                             console.log(`Skipping match ${match.name}, not started yet`);
+                        }
+                    }
+                    
+                    // Log fielding stats after processing all matches to verify
+                    console.log("Fielding stats after processing all matches:");
+                    for (const playerId in playerStats) {
+                        const player = playerStats[playerId];
+                        if (player.catches > 0 || player.stumpings > 0 || player.run_outs > 0) {
+                            console.log(`${player.player_name}: ${player.catches} catches, ${player.stumpings || 0} stumpings, ${player.run_outs} run-outs`);
                         }
                     }
                     
@@ -1330,20 +1357,24 @@
             // Get reference to this match's stats
             const matchStats = playerStats[canonicalId].matchStats[matchId];
             
-            // Get fielding contributions
-            // IMPORTANT: Skip catches as they're already processed in processBatsman
-            // Only process run outs here to avoid double counting
+            // Process fielding contributions
+            const catches = parseInt(fielder.catches || 0);
             const runOuts = parseInt(fielder.runout || 0);
+            const stumpings = parseInt(fielder.stumping || 0);
             
-            // Update overall stats - only update run outs, not catches
+            // Update overall stats
+            playerStats[canonicalId].catches += catches;
             playerStats[canonicalId].run_outs += runOuts;
+            playerStats[canonicalId].stumpings = (playerStats[canonicalId].stumpings || 0) + stumpings;
             
-            // Update match-specific stats - only update run outs, not catches
+            // Update match-specific stats
+            matchStats.catches += catches;
             matchStats.run_outs += runOuts;
+            matchStats.stumpings = (matchStats.stumpings || 0) + stumpings;
             
             // We no longer add points here as they will be calculated in calculateMatchScore
             
-            console.log(`Added fielding stats for ${fielderName}: ${runOuts} run outs`);
+            console.log(`Added fielding stats for ${fielderName}: ${catches} catches, ${runOuts} run outs, ${stumpings} stumpings`);
         }
         
         // Helper to extract catcher ID - not needed with the scorecard API
