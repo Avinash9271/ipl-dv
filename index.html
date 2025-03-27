@@ -1194,6 +1194,7 @@
             const srBonus = (sr / 100 - 1.5) * Math.max(runs, ballsFaced);
             const milestoneBonus = (runs >= 50 ? 8 : 0) + (runs >= 100 ? 8 : 0);
             const battingScore = runs + srBonus + milestoneBonus;
+            console.log(`Batting score for ${batterName}: ${battingScore.toFixed(2)}: ${srBonus.toFixed(2)}: ${milestoneBonus.toFixed(2)} ${runs} ${ballsFaced}`);
             
             // Update player's score for this match
             matchPlayerScores[canonicalId] += battingScore;
