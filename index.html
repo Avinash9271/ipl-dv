@@ -1118,8 +1118,11 @@
                                         }
                                         
                                         // Update catch stats for the catcher
+                                        const catcherMatchStats = playerStats[catcherCanonicalId].matchStats[matchId]; // Get ref
+                                        console.log(`DEBUG CATCHES: processBatsman - Before Add - player[${catcherCanonicalId}].catches=${playerStats[catcherCanonicalId].catches}, matchStats[${matchId}].catches=${catcherMatchStats.catches}`); // New log
                                         playerStats[catcherCanonicalId].catches += 1;
-                                        playerStats[catcherCanonicalId].matchStats[matchId].catches += 1;
+                                        catcherMatchStats.catches += 1;
+                                        console.log(`DEBUG CATCHES: processBatsman - After Add - player[${catcherCanonicalId}].catches=${playerStats[catcherCanonicalId].catches}, matchStats[${matchId}].catches=${catcherMatchStats.catches}`); // New log
                                         console.log(`Credited catch to ${catcherName} (from batsman dismissal processing)`);
                                         
                                         // We no longer add points here as they will be calculated in calculateMatchScore
@@ -1300,7 +1303,7 @@
             
             // Calculate bowling score
             // Formula: 3 * (1.5 * balls - runs) + 20 * wickets + 10 * good_ones + dot_balls + (wickets >= 3 ? 15 : 0)
-            // Note: We now calculate good_ones as the sum of wicket_bowled and wicket_lbw
+            // Note: We now calculate good_ones as the sum of bowled and lbw dismissals
             const economyBonus = 3 * (1.5 * ballsBowled - runsConceded);
             const wicketsBonus = wickets * 20;
             const goodOnes = playerStats[canonicalId].wicket_bowled + playerStats[canonicalId].wicket_lbw;
@@ -1382,9 +1385,11 @@
             playerStats[canonicalId].stumpings = (playerStats[canonicalId].stumpings || 0) + stumpings;
             
             // Update match-specific stats
+            console.log(`DEBUG CATCHES: processFielder - Before Add - player[${canonicalId}].catches=${playerStats[canonicalId].catches}, matchStats[${matchId}].catches=${matchStats.catches}, adding=${catches}`); // New log
             matchStats.catches += catches;
             matchStats.run_outs += runOuts;
             matchStats.stumpings = (matchStats.stumpings || 0) + stumpings;
+            console.log(`DEBUG CATCHES: processFielder - After Add - matchStats[${matchId}].catches=${matchStats.catches}`); // New log
             
             // We no longer add points here as they will be calculated in calculateMatchScore
             
