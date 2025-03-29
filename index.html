@@ -1360,7 +1360,9 @@
             const matchStats = playerStats[canonicalId].matchStats[matchId];
             
             // Process fielding contributions
+            console.log(`DEBUG CATCHES: BEFORE PARSE - fielder.catches value: ${fielder.catches}, type: ${typeof fielder.catches}`); // New log
             const catches = parseInt(fielder.catches || 0);
+            console.log(`DEBUG CATCHES: AFTER PARSE - local 'catches' value: ${catches}, type: ${typeof catches}`); // New log
             const runOuts = parseInt(fielder.runout || 0);
             const stumpings = parseInt(fielder.stumping || 0);
              console.log(`DEBUG CATCHES: processFielder for ${fielderName} (${canonicalId}) in match ${matchId}. Raw fielder data:`, fielder); // Added log
@@ -1523,7 +1525,7 @@
                     const matchStats = player.matchStats[matchId];
                     
                     // Calculate base score for this match
-                    const matchScore = calculateMatchScore(matchStats);
+                    const matchScore = calculateMatchScore(player, matchId, matchStats);
                     
                     // Apply 1.3x multiplier if this player was the highest scorer in the match
                     let finalMatchScore = matchScore;
@@ -1549,7 +1551,7 @@
         }
         
         // Function to calculate a player's score for a single match
-        function calculateMatchScore(stats) {
+        function calculateMatchScore(player, matchId, stats) {
             // Batting score
             let batsman_score = 0;
             if (stats.balls_faced > 0) {
@@ -1577,7 +1579,7 @@
             
             // console.log(`DEBUG CATCHES: ${stats.player_name} calculateMatchScore - Catches: ${stats.catches}, Run Outs: ${stats.run_outs}, Stumpings: ${stumpings}, Fielding Score: ${fielding_score}`); // Old incorrect log
             console.log(`DEBUG CATCHES: calculateMatchScore - Stats Input:`, stats); // Log the whole input object
-            console.log(`DEBUG CATCHES: calculateMatchScore - Final Fielding Values - Catches: ${stats.catches}, Run Outs: ${stats.run_outs}, Stumpings: ${stumpings}, Fielding Score: ${fielding_score}`); // Adjusted log
+            console.log(`DEBUG CATCHES: ${player.player_name} (${player.player_id}) in match ${matchId} - calculateMatchScore - Final Fielding Values - Catches: ${stats.catches}, Run Outs: ${stats.run_outs}, Stumpings: ${stumpings}, Fielding Score: ${fielding_score}`); // Log with player name/ID and match ID
 
             // Final score for this match
             return batsman_score + bowlers_score + fielding_score + 4;
