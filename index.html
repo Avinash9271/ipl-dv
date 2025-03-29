@@ -699,6 +699,12 @@
                     const latestMatchData = await fetchMatchDetails(latestMatch.id);
                     
                     if (latestMatchData && latestMatchData.status === "success") {
+                        // Log the specific batsman objects before caching
+                        console.log(`DEBUG CACHE SAVE (Latest): Inspecting match ${latestMatch.id} before caching. Dismissals:`, 
+                            latestMatchData?.data?.scorecard?.flatMap(inning => 
+                                inning.batting?.filter(b => b.dismissal?.toLowerCase().includes('catch')) || []
+                            )
+                        );
                         // Update the cache with latest data
                         cachedMatchData[latestMatch.id] = latestMatchData;
                         saveCachedData();
@@ -773,6 +779,12 @@
                             try {
                                 const matchDetails = await fetchMatchDetails(match.id);
                                 if (matchDetails && matchDetails.status === "success") {
+                                    // Log the specific batsman objects before caching
+                                    console.log(`DEBUG CACHE SAVE (Full): Inspecting match ${match.id} before caching. Dismissals:`, 
+                                        matchDetails?.data?.scorecard?.flatMap(inning => 
+                                            inning.batting?.filter(b => b.dismissal?.toLowerCase().includes('catch')) || []
+                                        )
+                                    );
                                     // Cache the match data
                                     cachedMatchData[match.id] = matchDetails;
                                     
