@@ -1575,7 +1575,7 @@
             const stumpings = stats.stumpings || 0;
             const fielding_score = (stats.catches + stats.run_outs + stumpings) * 10;
             
-            console.log(`DEBUG CATCHES: calculateMatchScore - Catches: ${stats.catches}, Run Outs: ${stats.run_outs}, Stumpings: ${stumpings}, Fielding Score: ${fielding_score}`); // Added log
+            console.log(`DEBUG CATCHES: ${stats.player_name} calculateMatchScore - Catches: ${stats.catches}, Run Outs: ${stats.run_outs}, Stumpings: ${stumpings}, Fielding Score: ${fielding_score}`); // Added log
             
             // Final score for this match
             return batsman_score + bowlers_score + fielding_score + 4;
