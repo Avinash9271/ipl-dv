@@ -281,9 +281,11 @@
             <span id="cache-status" class="cache-status">Cache status: Checking...</span>
         </div>
         <div class="refresh-btn-container">
-            <button id="refresh-button" class="refresh-btn" onclick="refreshData()" title="Only refreshes the latest match, previous matches are cached">Refresh Latest Match</button>
+            <!-- Button removed -->
+            <!-- Info text remains -->
             <div class="refresh-info">Only the latest match is refreshed to save data. Previous matches are cached locally.</div>
-            <button id="clear-cache-btn" class="clear-cache-btn" onclick="clearCache()" title="Clear all cached match data and fetch everything again">Clear Cache</button>
+            <!-- Add the Clear Cache button back -->
+            <button class="clear-cache-btn" onclick="clearCache()">Clear Cache</button>
         </div>
         <div id="loading">Loading player data...</div>
         <div id="error-container"></div>
@@ -587,6 +589,8 @@
         
         // Function to initialize player stats with base values
         function initializePlayerStats() {
+            // Ensure playerStats is reset before initialization if needed
+            playerStats = {}; 
             for (const playerId in teamOwnerMapping) {
                 const playerInfo = teamOwnerMapping[playerId];
                 playerStats[playerId] = {
@@ -624,7 +628,7 @@
         }
         
         // Function to fetch matches and load all required data
-        async function fetchMatches(onlyLatestMatch = false) {
+        async function fetchMatches() { // Removed onlyLatestMatch parameter
             try {
                 // Check for API key before making any requests
                 const apiKey = getApiKey();
@@ -632,213 +636,135 @@
                     throw new Error("Missing API key. Please add ?key=your-api-key to the URL.");
                 }
                 
-                // If only refreshing latest match and we have cached data, use a different approach
-                if (onlyLatestMatch && Object.keys(cachedMatchData).length > 0) {
-                    console.log("Refreshing only the latest match");
-                    
-                    document.getElementById('loading').textContent = "Loading team data...";
-                    
-                    // Load team owner mapping if not already loaded
-                    if (Object.keys(teamOwnerMapping).length === 0) {
-                        await fetchTeamOwnerMapping();
-                        initializePlayerStats();
-                    }
-                    
-                    document.getElementById('loading').textContent = "Finding latest match...";
-                    
-                    // Get all matches for the series to identify the latest one
-                    const allMatches = await fetchSeriesMatches(IPL_2025_SERIES_ID);
-                    console.log("Fetched all matches for latest status:", allMatches.length);
-                    
-                    // Filter to only consider matches that have started
-                    const startedMatches = allMatches.filter(match => match.status !== "Match not started");
-                    if (startedMatches.length === 0) {
-                        console.log("No started matches found");
-                        return [];
-                    }
-                    
-                    // Sort matches by date (assuming the API returns them in a consistent order)
-                    // If not, we might need a more robust approach with actual date parsing
-                    startedMatches.sort((a, b) => {
-                        // Use the date if available, otherwise use the ID as a fallback
-                        return new Date(b.date || 0) - new Date(a.date || 0) || b.id.localeCompare(a.id);
-                    });
-                    
-                    // Get the latest match
-                    const latestMatch = startedMatches[0];
-                    lastMatchId = latestMatch.id;
-                    console.log(`Latest match identified: ${latestMatch.name} (${latestMatch.id})`);
-                    
-                    // Reset player stats but maintain the cache
-                    playerStats = {};
-                    initializePlayerStats();
-                    
-                    // First, process all cached matches except the latest
-                    for (const matchId in cachedMatchData) {
-                        if (matchId !== latestMatch.id) {
-                            const matchData = cachedMatchData[matchId];
-                            console.log(`Processing cached match: ${matchId}`);
-                            processMatchData(matchData);
-                            matchesProcessed++;
-                        }
-                    }
-                    
-                    console.log(`DEBUG CATCHES: State after processing cached matches for Pooran (120):`, JSON.stringify(playerStats[120]?.matchStats, null, 2)); // Added Log 1
+                // Reset global state (except cache)
+                playerStats = {};
+                matchesProcessed = 0;
+                // lastMatchId is likely not needed anymore with this caching strategy
+                
+                // 1. Load existing cache from localStorage
+                loadCachedData(); // This updates the global cachedMatchData variable and UI status
 
-                    // Log fielding stats after processing cached matches to verify
-                    console.log("Fielding stats after processing cached matches:");
-                    for (const playerId in playerStats) {
-                        const player = playerStats[playerId];
-                        if (player.catches > 0 || player.stumpings > 0 || player.run_outs > 0) {
-                            console.log(`${player.player_name}: ${player.catches} catches, ${player.stumpings || 0} stumpings, ${player.run_outs} run-outs`);
-                        }
-                    }
-                    
-                    // Then fetch and process only the latest match
-                    document.getElementById('loading').textContent = `Refreshing latest match: ${latestMatch.name}...`;
-                    const latestMatchData = await fetchMatchDetails(latestMatch.id);
-                    
-                    if (latestMatchData && latestMatchData.status === "success") {
-                        // Log the specific batsman objects before caching
-                        console.log(`DEBUG CACHE SAVE (Latest): Inspecting match ${latestMatch.id} before caching. Dismissals:`, 
-                            latestMatchData?.data?.scorecard?.flatMap(inning => 
-                                inning.batting?.filter(b => b.dismissal?.toLowerCase().includes('catch')) || []
-                            )
-                        );
-                        // Update the cache with latest data
-                        cachedMatchData[latestMatch.id] = latestMatchData;
-                        saveCachedData();
-                        
-                        console.log(`Processing latest match: ${latestMatch.name}`);
-                        processMatchData(latestMatchData);
-                        matchesProcessed++;
+                document.getElementById('loading').textContent = "Loading team data...";
+                
+                // Load team owner mapping (never cached)
+                await fetchTeamOwnerMapping();
+                console.log("Team owner mapping loaded:", Object.keys(teamOwnerMapping).length, "players");
+                
+                // Initialize player stats structure (will be populated from cache/API)
+                initializePlayerStats();
+                
+                document.getElementById('loading').textContent = "Loading match list...";
+                
+                // 2. Fetch all matches for the series (never cached) to get latest statuses
+                console.log(`Fetching series info for: ${IPL_2025_SERIES_ID}`);
+                const matches = await fetchSeriesMatches(IPL_2025_SERIES_ID);
+                console.log("Fetched series info:", matches.length, "matches found.");
+                
+                // Define statuses that indicate a match is completed
+                // Adjust these based on the actual strings returned by the CricAPI
+                const completedStatuses = ["Result", "Match ended", "Completed", "Abandoned", "Finished"]; 
 
-                        console.log(`DEBUG CATCHES: State after processing latest match for Pooran (120):`, JSON.stringify(playerStats[120]?.matchStats, null, 2)); // Added Log 2
-                        
-                        // Log fielding stats after processing latest match to verify changes
-                        console.log("Fielding stats after processing latest match:");
-                        for (const playerId in playerStats) {
-                            const player = playerStats[playerId];
-                            if (player.catches > 0 || player.stumpings > 0 || player.run_outs > 0) {
-                                console.log(`${player.player_name}: ${player.catches} catches, ${player.stumpings || 0} stumpings, ${player.run_outs} run-outs`);
+                // 3. Iterate through matches and fetch/process details
+                const validMatchesProcessed = []; // Track matches successfully processed
+                for (const match of matches) {
+                    let matchDetails = null;
+                    const isCompleted = completedStatuses.some(status => match.status.toLowerCase().includes(status.toLowerCase()));
+
+                    document.getElementById('loading').textContent = `Processing match: ${match.name}... Status: ${match.status}`;
+
+                    if (isCompleted) {
+                        // 4a. Handle COMPLETED matches: Check cache first
+                        if (cachedMatchData[match.id]) {
+                            matchDetails = cachedMatchData[match.id];
+                            console.log(`Cache hit for completed match: ${match.name} (${match.id})`);
+                        } else {
+                            // Cache miss for completed match: Fetch and then cache
+                            console.log(`Cache miss for completed match: ${match.name} (${match.id}). Fetching...`);
+                            try {
+                                matchDetails = await fetchMatchDetails(match.id);
+                                if (matchDetails && matchDetails.status === "success") {
+                                    // Add to in-memory cache - will be saved later
+                                    cachedMatchData[match.id] = matchDetails; 
+                                    console.log(`Fetched and will cache completed match: ${match.name}`);
+                                } else {
+                                    console.warn(`Couldn't fetch valid scorecard for completed match to cache: ${match.name}`);
+                                    matchDetails = null; // Ensure it's null if fetch failed
+                                }
+                            } catch (error) {
+                                console.error(`Error fetching completed match ${match.name}:`, error);
+                                matchDetails = null;
                             }
                         }
                     } else {
-                        console.warn(`Couldn't fetch valid scorecard for latest match: ${latestMatch.name}`);
+                        // 4b. Handle NON-COMPLETED matches: Always fetch, never cache
+                        console.log(`Fetching non-completed match: ${match.name} (${match.id}), Status: ${match.status}`);
+                         try {
+                            matchDetails = await fetchMatchDetails(match.id);
+                             if (!matchDetails || matchDetails.status !== "success") {
+                                 console.warn(`Couldn't fetch valid scorecard for non-completed match: ${match.name}`);
+                                 matchDetails = null;
+                             }
+                         } catch (error) {
+                             console.error(`Error fetching non-completed match ${match.name}:`, error);
+                             matchDetails = null;
+                         }
                     }
-                    
-                    // Set extra multipliers and update timestamp
-                    setExtraMultipliers();
-                    const now = new Date();
-                    document.getElementById('update-time').textContent = now.toLocaleString();
-                    
-                    console.log(`DEBUG CATCHES: Final state before returning from fetchMatches for Pooran (120):`, JSON.stringify(playerStats[120]?.matchStats, null, 2)); // Added Log 3
 
-                    return [latestMatch];
-                } else {
-                    // Full refresh logic (original code)
-                    // Reset data
-                    playerStats = {};
-                    matchesProcessed = 0;
-                    cachedMatchData = {}; // Clear cache for full refresh
-                    
-                    document.getElementById('loading').textContent = "Loading team data...";
-                    
-                    // Step 1: Load team owner mapping from CSV
-                    await fetchTeamOwnerMapping();
-                    console.log("Team owner mapping loaded:", Object.keys(teamOwnerMapping).length, "players");
-                    
-                    // Initialize player stats with base values from team mapping
-                    initializePlayerStats();
-                    
-                    document.getElementById('loading').textContent = "Loading matches...";
-                    
-                    // Step 2: Fetch all matches for the series
-                    console.log(`Fetching matches for series: ${IPL_2025_SERIES_ID}`);
-                    const matches = await fetchSeriesMatches(IPL_2025_SERIES_ID);
-                    console.log("Fetched matches:", matches.length);
-                    
-                    // Sort matches to ensure consistent processing order
-                    matches.sort((a, b) => {
-                        return new Date(a.date || 0) - new Date(b.date || 0) || a.id.localeCompare(b.id);
-                    });
-                    
-                    // Keep track of the latest match
-                    if (matches.length > 0) {
-                        const startedMatches = matches.filter(match => match.status !== "Match not started");
-                        if (startedMatches.length > 0) {
-                            lastMatchId = startedMatches[startedMatches.length - 1].id;
-                        }
+                    // 5. Process data if successfully obtained (from cache or API)
+                    if (matchDetails) {
+                         try {
+                             processMatchData(matchDetails);
+                             validMatchesProcessed.push(match); // Track processed matches
+                             matchesProcessed++;
+                         } catch (processingError) {
+                             console.error(`Error processing data for match ${match.name} (${match.id}):`, processingError);
+                         }
+                    } else {
+                         console.log(`Skipping processing for match ${match.name} (${match.id}) due to missing or invalid data.`);
                     }
-                    
-                    // Step 3: Fetch each match's scorecard
-                    const validMatches = [];
-                    for (const match of matches) {
-                        if (match.status !== "Match not started") {
-                            document.getElementById('loading').textContent = `Loading match details for ${match.name}...`;
-                            try {
-                                const matchDetails = await fetchMatchDetails(match.id);
-                                if (matchDetails && matchDetails.status === "success") {
-                                    // Log the specific batsman objects before caching
-                                    console.log(`DEBUG CACHE SAVE (Full): Inspecting match ${match.id} before caching. Dismissals:`, 
-                                        matchDetails?.data?.scorecard?.flatMap(inning => 
-                                            inning.batting?.filter(b => b.dismissal?.toLowerCase().includes('catch')) || []
-                                        )
-                                    );
-                                    // Cache the match data
-                                    cachedMatchData[match.id] = matchDetails;
-                                    
-                                    processMatchData(matchDetails);
-                                    validMatches.push(match);
-                                    matchesProcessed++;
-                                } else {
-                                    console.warn(`Couldn't fetch valid scorecard for ${match.name}`);
-                                }
-                            } catch (error) {
-                                console.error(`Error processing match ${match.name}:`, error);
-                            }
-                        } else {
-                            console.log(`Skipping match ${match.name}, not started yet`);
-                        }
-                    }
-                    
-                    // Log fielding stats after processing all matches to verify
-                    console.log("Fielding stats after processing all matches:");
-                    for (const playerId in playerStats) {
-                        const player = playerStats[playerId];
-                        if (player.catches > 0 || player.stumpings > 0 || player.run_outs > 0) {
-                            console.log(`${player.player_name}: ${player.catches} catches, ${player.stumpings || 0} stumpings, ${player.run_outs} run-outs`);
-                        }
-                    }
-                    
-                    // Save all match data to cache
-                    saveCachedData();
-                    
-                    // Step 4: Set extra multipliers and calculate scores
-                    setExtraMultipliers();
-                    
-                    // Update the timestamp
-                    const now = new Date();
-                    document.getElementById('update-time').textContent = now.toLocaleString();
-                    
-                    return validMatches;
-                }
+                } // End of match loop
+                
+                // 6. Save the updated cache (containing any newly fetched completed matches)
+                saveCachedData(); // Persist cachedMatchData to localStorage
+                
+                // 7. Final calculations and display updates
+                setExtraMultipliers(); // This function seems okay as is
+                calculateAllScores();
+                displayPlayerTable();
+                displayTeamDashboard(); // Needs to be called to render initially
+                showTab('team-dashboard'); // Keep default view
+                
+                // Update the timestamp
+                const now = new Date();
+                document.getElementById('update-time').textContent = now.toLocaleString();
+                document.getElementById('loading').style.display = 'none'; // Hide loading message
+
+                console.log("Finished processing all matches.");
+                return validMatchesProcessed; // Return list of matches processed
+
             } catch (error) {
-                console.error("Error fetching matches:", error);
-                // Check if this might be an API key issue
+                console.error("Error in fetchMatches:", error);
+                // Handle potential API key errors specifically
                 const urlParams = new URLSearchParams(window.location.search);
-                if (!urlParams.has('key')) {
-                    alert("API Key Error: You need to add the last 4 characters of the API key as a URL parameter. Example: ?key=477a");
-                } else if (error.toString().includes("API") || error.toString().includes("auth")) {
-                    alert("API Key Error: The provided key suffix seems incorrect. Please check the 'key' parameter in the URL.");
+                if (!urlParams.has('key') || urlParams.get('key').trim() === '') {
+                   document.getElementById('loading').textContent = "Error: Missing API key";
+                   alert("API Key Error: You need to add your API key as a URL parameter. Example: ?key=your-api-key");
+                } else if (error.toString().includes("API") || error.toString().includes("auth") || error.message.includes("key")) {
+                   document.getElementById('loading').textContent = "Error: Invalid API key";
+                   alert("API Key Error: The provided key seems incorrect or invalid. Please check the 'key' parameter in the URL.");
+                } else {
+                   document.getElementById('loading').textContent = "Error loading data.";
                 }
+                
                 document.getElementById('error-container').innerHTML = `
                     <div class="error">
                         <h3>Error loading data</h3>
                         <p>${error.message}</p>
                     </div>
                 `;
-                return [];
+                // Ensure loading is hidden on error too
+                document.getElementById('loading').style.display = 'none'; 
+                return []; // Return empty array on error
             }
         }
         
@@ -2078,31 +2004,36 @@
                     
                     // Reset in-memory cache
                     cachedMatchData = {};
-                    lastMatchId = null;
+                    // lastMatchId is not really used with this strategy, can be kept null or removed later
+                    lastMatchId = null; 
                     
-                    // Update cache status
+                    // Update cache status immediately
                     updateCacheStatus(false);
                     
-                    // Show a message
+                    // Show a message and trigger full refresh
                     document.getElementById('loading').style.display = 'block';
                     document.getElementById('loading').textContent = 'Cache cleared! Performing full refresh...';
+                    document.getElementById('error-container').innerHTML = ''; // Clear previous errors
                     
-                    // Perform a full refresh
-                    const refreshButton = document.getElementById('refresh-button');
-                    refreshButton.classList.add('loading');
-                    refreshButton.disabled = true;
+                    // Disable refresh/clear buttons during refresh? (Optional but good UX)
+                    // const clearButton = document.querySelector('.clear-cache-btn');
+                    // if (clearButton) clearButton.disabled = true;
+
+                    // Perform a full refresh by calling fetchMatches again
+                    fetchData(false) // Pass false just for consistency, though it's ignored now
+                        .catch(err => console.error("Error during refresh after cache clear:", err)) // Log potential errors during the refresh
+                        .finally(() => {
+                             // Re-enable buttons if they were disabled
+                             // if (clearButton) clearButton.disabled = false;
+                            console.log('Full refresh after cache clear completed.');
+                        });
                     
-                    // Full refresh (false means don't use cache)
-                    fetchData(false).finally(() => {
-                        refreshButton.classList.remove('loading');
-                        refreshButton.disabled = false;
-                        refreshButton.textContent = 'Refresh Latest Match';
-                    });
-                    
-                    console.log('Cache cleared successfully');
+                    console.log('Cache cleared successfully, initiated refresh.');
                 } catch (error) {
                     console.error('Error clearing cache:', error);
                     alert('An error occurred while clearing the cache. Please try again.');
+                    // Ensure loading message is hidden if clearing fails badly
+                     document.getElementById('loading').style.display = 'none';
                 }
             }
         }
