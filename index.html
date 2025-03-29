@@ -683,6 +683,8 @@
                         }
                     }
                     
+                    console.log(`DEBUG CATCHES: State after processing cached matches for Pooran (120):`, JSON.stringify(playerStats[120]?.matchStats, null, 2)); // Added Log 1
+
                     // Log fielding stats after processing cached matches to verify
                     console.log("Fielding stats after processing cached matches:");
                     for (const playerId in playerStats) {
@@ -704,6 +706,8 @@
                         console.log(`Processing latest match: ${latestMatch.name}`);
                         processMatchData(latestMatchData);
                         matchesProcessed++;
+
+                        console.log(`DEBUG CATCHES: State after processing latest match for Pooran (120):`, JSON.stringify(playerStats[120]?.matchStats, null, 2)); // Added Log 2
                         
                         // Log fielding stats after processing latest match to verify changes
                         console.log("Fielding stats after processing latest match:");
@@ -722,6 +726,8 @@
                     const now = new Date();
                     document.getElementById('update-time').textContent = now.toLocaleString();
                     
+                    console.log(`DEBUG CATCHES: Final state before returning from fetchMatches for Pooran (120):`, JSON.stringify(playerStats[120]?.matchStats, null, 2)); // Added Log 3
+
                     return [latestMatch];
                 } else {
                     // Full refresh logic (original code)
