@@ -663,11 +663,22 @@
                 // Define statuses that indicate a match is completed
                 // Adjust these based on the actual strings returned by the CricAPI
                 const completedStatuses = ["Result", "Match ended", "Completed", "Abandoned", "Finished"]; 
+                
+                // Define statuses that indicate a match has not started yet
+                const unstartedStatuses = ["Match not started", "Scheduled", "Postponed"]; 
 
                 // 3. Iterate through matches and fetch/process details
                 const validMatchesProcessed = []; // Track matches successfully processed
                 for (const match of matches) {
                     let matchDetails = null;
+                    
+                    // First, check if the match hasn't started yet
+                    const isUnstarted = unstartedStatuses.some(status => match.status.toLowerCase().includes(status.toLowerCase()));
+                    if (isUnstarted) {
+                        console.log(`Skipping unstarted match: ${match.name} (${match.id}), Status: ${match.status}`);
+                        continue; // Move to the next match
+                    }
+                    
                     const isCompleted = completedStatuses.some(status => match.status.toLowerCase().includes(status.toLowerCase()));
 
                     document.getElementById('loading').textContent = `Processing match: ${match.name}... Status: ${match.status}`;
