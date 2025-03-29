@@ -673,13 +673,13 @@
                     let matchDetails = null;
                     
                     // First, check if the match hasn't started yet
-                    const isUnstarted = unstartedStatuses.some(status => match.status.toLowerCase().includes(status.toLowerCase()));
+                    const isUnstarted = match.matchStarted == false;
                     if (isUnstarted) {
                         console.log(`Skipping unstarted match: ${match.name} (${match.id}), Status: ${match.status}`);
                         continue; // Move to the next match
                     }
                     
-                    const isCompleted = completedStatuses.some(status => match.status.toLowerCase().includes(status.toLowerCase()));
+                    const isCompleted = match.matchEnded == true;
 
                     document.getElementById('loading').textContent = `Processing match: ${match.name}... Status: ${match.status}`;
 
