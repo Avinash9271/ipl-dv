@@ -2139,7 +2139,27 @@
                     target.matchStats[matchId] = {...source.matchStats[matchId]};
                 } else {
                     // If both players have stats for this match, we should merge them
-                    console.log(`Both players have stats for match ${matchId}, merging carefully`);
+                    console.log(`Merging matchStats for match ${matchId}`);
+                    const targetMatch = target.matchStats[matchId];
+                    const sourceMatch = source.matchStats[matchId];
+                    
+                    // Iterate through all possible numeric stats and add source to target
+                    const numericStats = [
+                        'runs', 'balls_faced', 'wickets', 'wicket_bowled', 'wicket_lbw', 
+                        'wicket_caught', 'wicket_stumped', 'wicket_other', 'balls_bowled', 
+                        'catches', 'run_outs', 'stumpings', 'runs_conceded', 'dot_balls', 
+                        'good_ones', 'fours', 'sixes'
+                    ];
+                    
+                    numericStats.forEach(statKey => {
+                        targetMatch[statKey] = (targetMatch[statKey] || 0) + (sourceMatch[statKey] || 0);
+                    });
+
+                    // Handle highest scorer flag (take true if either is true)
+                    targetMatch.is_highest_scorer = targetMatch.is_highest_scorer || sourceMatch.is_highest_scorer;
+
+                    // Note: economy and strike_rate are calculated per match instance, not merged here
+                    // High score within a match is also not merged, it represents score in that innings
                 }
             }
             
