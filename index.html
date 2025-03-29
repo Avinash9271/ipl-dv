@@ -984,6 +984,7 @@
             
             // Initialize this match's stats if they don't exist
             if (!playerStats[canonicalId].matchStats[matchId]) {
+                console.log(`DEBUG CATCHES: Initializing matchStats[${matchId}] for ${batterName} (${canonicalId}) in processBatsman`); // Added log
                 playerStats[canonicalId].matchStats[matchId] = {
                     runs: 0,
                     balls_faced: 0,
@@ -1227,6 +1228,7 @@
             
             // Initialize this match's stats if they don't exist
             if (!playerStats[canonicalId].matchStats[matchId]) {
+                console.log(`DEBUG CATCHES: Initializing matchStats[${matchId}] for ${bowlerName} (${canonicalId}) in processBowler`); // Added log
                 playerStats[canonicalId].matchStats[matchId] = {
                     runs: 0,
                     balls_faced: 0,
@@ -1332,6 +1334,7 @@
             
             // Initialize this match's stats if they don't exist
             if (!playerStats[canonicalId].matchStats[matchId]) {
+                console.log(`DEBUG CATCHES: Initializing matchStats[${matchId}] for ${fielderName} (${canonicalId}) in processFielder`); // Added log
                 playerStats[canonicalId].matchStats[matchId] = {
                     runs: 0,
                     balls_faced: 0,
