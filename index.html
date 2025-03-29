@@ -1084,6 +1084,7 @@
                             playerStats[bowlerCanonicalId].matchStats[matchId].wicket_caught += 1;
                             
                             // Credit the catch to the catcher if available
+                            console.log(`DEBUG CATCHES: processBatsman - Checking dismissal for catch for ${batterName} (${canonicalId}). Batsman object:`, batsman); // Modified log to include name
                             if (batsman.catcher && batsman.catcher.id) {
                                 const catcherId = String(batsman.catcher.id || "");
                                 const catcherName = batsman.catcher.name || "";
