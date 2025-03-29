@@ -916,6 +916,7 @@
                 }
                 
                 // Process fielding stats
+                console.log(`DEBUG CATCHES: Processing fielding for match ${matchId}. Inning catching data:`, inning.catching); // Added log
                 if (inning.catching) {
                     inning.catching.forEach(fielder => {
                         processFielder(fielder, matchId, matchPlayerScores);
@@ -1362,6 +1363,7 @@
             const catches = parseInt(fielder.catches || 0);
             const runOuts = parseInt(fielder.runout || 0);
             const stumpings = parseInt(fielder.stumping || 0);
+             console.log(`DEBUG CATCHES: processFielder for ${fielderName} (${canonicalId}) in match ${matchId}. Raw fielder data:`, fielder); // Added log
             
             // Update overall stats
             playerStats[canonicalId].catches += catches;
@@ -1375,7 +1377,7 @@
             
             // We no longer add points here as they will be calculated in calculateMatchScore
             
-            console.log(`Added fielding stats for ${fielderName}: ${catches} catches, ${runOuts} run outs, ${stumpings} stumpings`);
+            console.log(`DEBUG CATCHES: Updated fielding stats for ${fielderName}: ${catches} catches, ${runOuts} run outs, ${stumpings} stumpings`); // Updated log
         }
         
         // Helper to extract catcher ID - not needed with the scorecard API
@@ -1572,6 +1574,8 @@
             // Fielding score (catches, stumpings, and run-outs)
             const stumpings = stats.stumpings || 0;
             const fielding_score = (stats.catches + stats.run_outs + stumpings) * 10;
+            
+            console.log(`DEBUG CATCHES: calculateMatchScore - Catches: ${stats.catches}, Run Outs: ${stats.run_outs}, Stumpings: ${stumpings}, Fielding Score: ${fielding_score}`); // Added log
             
             // Final score for this match
             return batsman_score + bowlers_score + fielding_score + 4;
